@@ -1,0 +1,6 @@
+.cache/
+.gemini/
+.termux/
+.git/
+*.pyc
+__pycache__/
