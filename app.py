@@ -107,7 +107,7 @@ def load_table(sheet_name, columns, csv_filename):
         try:
             ws = sh.worksheet(sheet_name)
         except gspread.WorksheetNotFound:
-            ws = sh.add_worksheet(title=sheet_name, rows="500", cols=str(len(columns)))
+            ws = sh.add_worksheet(title=sheet_name, rows=1000, cols=len(columns))
             ws.append_row(columns)
         
         all_values = ws.get_all_values()
@@ -140,7 +140,7 @@ def save_table(df, sheet_name, csv_filename, columns):
         try:
             ws = sh.worksheet(sheet_name)
         except gspread.WorksheetNotFound:
-            ws = sh.add_worksheet(title=sheet_name, rows="500", cols=str(len(columns)))
+            ws = sh.add_worksheet(title=sheet_name, rows=1000, cols=len(columns))
         ws.clear()
         data_to_write = [columns] + df.values.tolist()
         ws.update('A1', data_to_write)
