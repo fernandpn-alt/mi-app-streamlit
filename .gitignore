@@ -4,3 +4,7 @@
 .git/
 *.pyc
 __pycache__/
+.streamlit/
+credenciales_toml.txt
+*.xlsx
+*.csv
