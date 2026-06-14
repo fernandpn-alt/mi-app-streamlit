@@ -192,6 +192,28 @@ try:
         sh = gc.open_by_url(target_url)
         worksheet = sh.get_worksheet(0)
         use_gsheets = True
+        
+        # Repair spreadsheet formulas in the STOCK sheet automatically
+        try:
+            ws_stock = sh.worksheet("STOCK")
+            vals = ws_stock.col_values(6, value_render_option="FORMULA")
+            for i in range(2, len(vals)):
+                row_num = i + 1
+                val = vals[i]
+                if "CRITERIOSTOCK" in val:
+                    ws_stock.update_cell(row_num, 6, f'=IF(B{row_num}<>"",SUMIFS(ENTRADASCANTIDAD,ENTRADASPRODUCTOS,B{row_num}),"")')
+            
+            # Map Row 3-10 to SALIDAS columns to fix missing calculations
+            ws_stock.update_cell(3, 7, "=SUM(SALIDAS!E3:E1000)")
+            ws_stock.update_cell(4, 7, "=SUM(SALIDAS!F3:F1000)")
+            ws_stock.update_cell(5, 7, "=SUM(SALIDAS!G3:G1000)")
+            ws_stock.update_cell(6, 7, "=SUM(SALIDAS!H3:H1000)")
+            ws_stock.update_cell(7, 7, "=SUM(SALIDAS!I3:I1000)")
+            ws_stock.update_cell(8, 7, "=SUM(SALIDAS!J3:J1000)")
+            ws_stock.update_cell(9, 7, "=SUM(SALIDAS!L3:L1000)")
+            ws_stock.update_cell(10, 7, "=SUM(SALIDAS!K3:K1000)")
+        except Exception:
+            pass
 except Exception as e:
     st.sidebar.error(f"Error conectando a Google Sheets: {e}")
 
@@ -211,60 +233,614 @@ def get_or_create_worksheet(sheet_name, columns):
         ws.append_row(columns)
     return ws
 
-# Helper to load sheet/csv
+# Helper to load sheet/csv (customized for sheet structures)
+
 @st.cache_data(ttl=600)
-def load_table(sheet_name, columns, csv_filename):
+def load_recibos_from_salidas():
     global use_gsheets
-    columns_list = list(columns)
+    recibos_cols = ["FOLIO", "FECHA", "CLIENTE", "PRODUCTOS", "TOTAL", "COSTO", "GANANCIA", "TIPO_PAGO", "ESTADO_PAGO", "ABONADO", "PENDIENTE"]
+    
     if use_gsheets and sh is not None:
         try:
-            ws = get_or_create_worksheet(sheet_name, columns_list)
+            ws = sh.worksheet("Salidas")
             all_values = ws.get_all_values()
-            if len(all_values) < 2:
-                return pd.DataFrame(columns=columns_list)
             
-            headers = [h.strip() for h in all_values[0]]
-            rows = all_values[1:]
-            df = pd.DataFrame(rows, columns=headers)
+            # Skip first 2 rows (row 0: sum totals, row 1: headers)
+            if len(all_values) < 3:
+                return pd.DataFrame(columns=recibos_cols)
+                
+            rows = all_values[2:]
+            records = []
             
-            df = df[[c for c in columns_list if c in df.columns]]
-            for c in columns_list:
-                if c not in df.columns:
-                    df[c] = ""
-            return df
+            # Match the order of flavor columns in the sheet (Cols E to L)
+            product_names = ["FUEGO", "RANCHERO", "SALSAS NEGRAS", "JALAPEÑO", "QUESO", "NATURAL", "PIQUIN", "FUEGUITO"]
+            
+            for row in rows:
+                row = row + [""] * (19 - len(row))
+                
+                cliente = row[2].strip().upper()
+                if not cliente or cliente == "CLIENTE":
+                    continue  # Skip empty or header rows
+                    
+                folio = row[1].strip() if row[1] else f"F-{len(records)+1:03d}"
+                fecha = row[3].strip()
+                
+                # Parse flavor quantities from Columns E to L (index 4 to 11)
+                products_list = []
+                for p_idx, p_name in enumerate(product_names):
+                    col_val = row[4 + p_idx].strip()
+                    if col_val:
+                        try:
+                            qty = int(float(col_val))
+                            if qty > 0:
+                                products_list.append(f"{qty}x {p_name}")
+                        except ValueError:
+                            pass
+                            
+                products_summary = "; ".join(products_list)
+                is_revoked = cliente.startswith("[REVOCADO]")
+                
+                # Financials (Columns M, N, O)
+                try:
+                    total = float(row[13].replace("$", "").replace(",", "").strip()) if row[13] else 0.0
+                except ValueError:
+                    total = 0.0
+                    
+                try:
+                    costo_total = float(row[12].replace("$", "").replace(",", "").strip()) if row[12] else 0.0
+                except ValueError:
+                    costo_total = 0.0
+                    
+                try:
+                    ganancia = float(row[14].replace("$", "").replace(",", "").strip()) if row[14] else 0.0
+                except ValueError:
+                    ganancia = 0.0
+                    
+                # Payment Info (from columns P, Q, R, S / indices 15, 16, 17, 18)
+                if row[15].strip() or row[16].strip() or row[17].strip():
+                    try:
+                        abonado = float(row[15].replace("$", "").replace(",", "").strip()) if row[15] else 0.0
+                    except ValueError:
+                        abonado = 0.0
+                    try:
+                        pendiente = float(row[16].replace("$", "").replace(",", "").strip()) if row[16] else 0.0
+                    except ValueError:
+                        pendiente = 0.0
+                    estado_pago = row[17].strip() if row[17] else ("Pagado" if pendiente == 0 else "Por Pagar")
+                    tipo_pago = row[18].strip() if row[18] else ("Contado" if (pendiente == 0 or "FUEGUITO" in products_summary) else "Consigna")
+                else:
+                    # Fallback for old rows (assume fully paid)
+                    if is_revoked:
+                        abonado = 0.0
+                        pendiente = 0.0
+                        estado_pago = "REVOCADO"
+                        tipo_pago = "Contado"
+                    else:
+                        abonado = total
+                        pendiente = 0.0
+                        estado_pago = "Pagado"
+                        tipo_pago = "Contado" if (total > 0) else "Consigna"
+                        
+                records.append({
+                    "FOLIO": folio,
+                    "FECHA": fecha,
+                    "CLIENTE": cliente,
+                    "PRODUCTOS": products_summary,
+                    "TOTAL": total,
+                    "COSTO": costo_total,
+                    "GANANCIA": ganancia,
+                    "TIPO_PAGO": tipo_pago,
+                    "ESTADO_PAGO": estado_pago,
+                    "ABONADO": abonado,
+                    "PENDIENTE": pendiente
+                })
+                
+            return pd.DataFrame(records)
         except Exception as e:
-            st.sidebar.warning(f"⚠️ Sincronización de tabla '{sheet_name}' falló. Usando copia local. Detalle: {e}")
+            st.sidebar.warning(f"⚠️ Sincronización de Salidas falló. Usando copia local. Detalle: {e}")
             use_gsheets = False
             
-    if not os.path.exists(csv_filename):
-        pd.DataFrame(columns=columns_list).to_csv(csv_filename, index=False)
-    df = pd.read_csv(csv_filename)
-    # Ensure all columns exist
-    for c in columns_list:
+    # Fallback to local CSV
+    if not os.path.exists(REC_FILE):
+        pd.DataFrame(columns=recibos_cols).to_csv(REC_FILE, index=False)
+    df = pd.read_csv(REC_FILE)
+    for c in recibos_cols:
         if c not in df.columns:
             df[c] = ""
     return df
 
-def save_table(df, sheet_name, csv_filename, columns):
+def save_recibo_to_salidas(folio, fecha, cliente, cart, total_sale, total_cost, total_profit, payment_term, abonado, pendiente, estado_pago):
     global use_gsheets
-    # Clear Streamlit cache so next load pulls the new version
+    recibos_cols = ["FOLIO", "FECHA", "CLIENTE", "PRODUCTOS", "TOTAL", "COSTO", "GANANCIA", "TIPO_PAGO", "ESTADO_PAGO", "ABONADO", "PENDIENTE"]
+    products_summary = "; ".join([f"{item['CANTIDAD']}x {item['PRODUCTO']}" for item in cart])
+    
+    # Save locally first
+    if os.path.exists(REC_FILE):
+        df_local = pd.read_csv(REC_FILE)
+    else:
+        df_local = pd.DataFrame(columns=recibos_cols)
+        
+    new_local_receipt = {
+        "FOLIO": folio,
+        "FECHA": fecha,
+        "CLIENTE": cliente,
+        "PRODUCTOS": products_summary,
+        "TOTAL": total_sale,
+        "COSTO": total_cost,
+        "GANANCIA": total_profit,
+        "TIPO_PAGO": payment_term,
+        "ESTADO_PAGO": estado_pago,
+        "ABONADO": abonado,
+        "PENDIENTE": pendiente
+    }
+    df_local = pd.concat([df_local, pd.DataFrame([new_local_receipt])], ignore_index=True)
+    df_local.to_csv(REC_FILE, index=False)
     st.cache_data.clear()
     
-    columns_list = list(columns)
-    # Ensure correct columns and format
-    df = df[columns_list].copy()
     if use_gsheets and sh is not None:
         try:
-            ws = get_or_create_worksheet(sheet_name, columns_list)
-            ws.clear()
-            data_to_write = [columns_list] + df.values.tolist()
-            ws.update('A1', data_to_write)
-            return
+            ws = sh.worksheet("Salidas")
+            current_rows = len(ws.get_all_values())
+            new_row_idx = current_rows + 1
+            
+            product_names = ["FUEGO", "RANCHERO", "SALSAS NEGRAS", "JALAPEÑO", "QUESO", "NATURAL", "PIQUIN", "FUEGUITO"]
+            qtys = [0] * len(product_names)
+            for item in cart:
+                item_name = item['PRODUCTO'].strip().upper()
+                if item_name in product_names:
+                    idx = product_names.index(item_name)
+                    qtys[idx] += item['CANTIDAD']
+                    
+            # Map elements to the correct sheet columns (preserving formulas in columns M and O)
+            new_row = [
+                "", # Col A (1)
+                folio, # Col B (2)
+                cliente, # Col C (3)
+                fecha, # Col D (4)
+                qtys[0] if qtys[0] > 0 else "", # Col E (5)
+                qtys[1] if qtys[1] > 0 else "", # Col F (6)
+                qtys[2] if qtys[2] > 0 else "", # Col G (7)
+                qtys[3] if qtys[3] > 0 else "", # Col H (8)
+                qtys[4] if qtys[4] > 0 else "", # Col I (9)
+                qtys[5] if qtys[5] > 0 else "", # Col J (10)
+                qtys[6] if qtys[6] > 0 else "", # Col K (11) (PIQUIN)
+                qtys[7] if qtys[7] > 0 else "", # Col L (12) (FUEGUITO)
+                f"=SUM(E{new_row_idx}*PRODUCTOS!$G$3,F{new_row_idx}*PRODUCTOS!$G$4,G{new_row_idx}*PRODUCTOS!$G$5,H{new_row_idx}*PRODUCTOS!$G$6,I{new_row_idx}*PRODUCTOS!$G$7,J{new_row_idx}*PRODUCTOS!$G$8,K{new_row_idx}*PRODUCTOS!$G$10,L{new_row_idx}*PRODUCTOS!$G$9)", # Col M (13) (COMPRA)
+                total_sale, # Col N (14) (VENTA)
+                f"=N{new_row_idx}-M{new_row_idx}", # Col O (15) (GANANCIA BRUTA)
+                abonado, # Col P (16) (ABONADO)
+                pendiente, # Col Q (17) (PENDIENTE)
+                estado_pago, # Col R (18) (ESTADO_PAGO)
+                payment_term # Col S (19) (TIPO_PAGO)
+            ]
+            ws.append_row(new_row, value_input_option="USER_ENTERED")
+            return True
         except Exception as e:
-            st.sidebar.error(f"❌ Error guardando '{sheet_name}' en Drive: {e}. Guardando copia local.")
+            st.sidebar.error(f"❌ Error al guardar en Drive (Salidas): {e}")
+            use_gsheets = False
+    return False
+
+def update_abono_in_salidas(folio, new_abonado, new_pendiente, nuevo_estado):
+    global use_gsheets
+    if os.path.exists(REC_FILE):
+        df_local = pd.read_csv(REC_FILE)
+        df_local.loc[df_local['FOLIO'] == folio, 'ABONADO'] = new_abonado
+        df_local.loc[df_local['FOLIO'] == folio, 'PENDIENTE'] = new_pendiente
+        df_local.loc[df_local['FOLIO'] == folio, 'ESTADO_PAGO'] = nuevo_estado
+        df_local.to_csv(REC_FILE, index=False)
+        st.cache_data.clear()
+        
+    if use_gsheets and sh is not None:
+        try:
+            ws = sh.worksheet("Salidas")
+            all_values = ws.get_all_values()
+            for i, row in enumerate(all_values):
+                if i < 2:
+                    continue
+                if len(row) > 1 and row[1].strip() == folio.strip():
+                    row_idx = i + 1
+                    ws.update_cell(row_idx, 16, new_abonado)  # Col P (16)
+                    ws.update_cell(row_idx, 17, new_pendiente) # Col Q (17)
+                    ws.update_cell(row_idx, 18, nuevo_estado)  # Col R (18)
+                    break
+            return True
+        except Exception as e:
+            st.sidebar.error(f"❌ Error al actualizar abono en Drive: {e}")
+            use_gsheets = False
+    return False
+
+def revoke_recibo_in_salidas(folio):
+    global use_gsheets
+    if os.path.exists(REC_FILE):
+        df_local = pd.read_csv(REC_FILE)
+        idx_local = df_local[df_local['FOLIO'] == folio].index[0]
+        original_summary = df_local.at[idx_local, 'PRODUCTOS']
+        
+        df_local.at[idx_local, 'PRODUCTOS'] = f"[REVOCADO] {original_summary}"
+        df_local.at[idx_local, 'TOTAL'] = 0.0
+        df_local.at[idx_local, 'COSTO'] = 0.0
+        df_local.at[idx_local, 'GANANCIA'] = 0.0
+        df_local.at[idx_local, 'ABONADO'] = 0.0
+        df_local.at[idx_local, 'PENDIENTE'] = 0.0
+        df_local.at[idx_local, 'ESTADO_PAGO'] = "REVOCADO"
+        df_local.to_csv(REC_FILE, index=False)
+        st.cache_data.clear()
+        
+    if use_gsheets and sh is not None:
+        try:
+            ws = sh.worksheet("Salidas")
+            all_values = ws.get_all_values()
+            for i, row in enumerate(all_values):
+                if i < 2:
+                    continue
+                if len(row) > 1 and row[1].strip() == folio.strip():
+                    row_idx = i + 1
+                    original_name = row[2]
+                    ws.update_cell(row_idx, 3, f"[REVOCADO] {original_name}") # Col C (3)
+                    for c in range(5, 13):
+                        ws.update_cell(row_idx, c, "") # Columns E to L (5 to 12)
+                    ws.update_cell(row_idx, 14, 0.0) # Column N (14, VENTA)
+                    ws.update_cell(row_idx, 16, 0.0) # Column P (16, ABONADO)
+                    ws.update_cell(row_idx, 17, 0.0) # Column Q (17, PENDIENTE)
+                    ws.update_cell(row_idx, 18, "REVOCADO") # Column R (18, ESTADO_PAGO)
+                    break
+            return True
+        except Exception as e:
+            st.sidebar.error(f"❌ Error al revocar recibo en Drive: {e}")
+            use_gsheets = False
+    return False
+
+# Date parser helper
+def safe_parse_date(date_str):
+    if not date_str:
+        return datetime.today().date()
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d/%m/%Y", "%d/%m/%y"):
+        try:
+            return datetime.strptime(str(date_str).strip(), fmt).date()
+        except ValueError:
+            pass
+    try:
+        return pd.to_datetime(date_str).date()
+    except Exception:
+        return datetime.today().date()
+
+@st.cache_data(ttl=600)
+def load_gastos_from_sheet():
+    global use_gsheets
+    gastos_cols = ["ROW_IDX", "COL_IDX", "FECHA", "CATEGORIA", "DESCRIPCION", "MONTO"]
+    
+    if use_gsheets and sh is not None:
+        try:
+            ws = sh.worksheet("Gastos")
+            all_values = ws.get_all_values()
+            if len(all_values) < 3:
+                return pd.DataFrame(columns=gastos_cols)
+                
+            rows = all_values[2:]
+            records = []
+            category_names = ["CASETA", "GASOLINA", "COCHE", "ESTACIONAMIENTO", "PUBLICIDAD", "OTROS"]
+            
+            for r_idx, row in enumerate(rows):
+                row = row + [""] * (10 - len(row))
+                fecha = row[1].strip()
+                if not fecha:
+                    continue
+                    
+                observaciones = row[8].strip()
+                found_gasto = False
+                
+                # Check category columns C to H
+                for c_offset, cat in enumerate(category_names):
+                    val = row[2 + c_offset].strip()
+                    if val:
+                        try:
+                            monto = float(val.replace("$", "").replace(",", "").strip())
+                            if monto > 0:
+                                records.append({
+                                    "ROW_IDX": r_idx + 3, # 1-based row index in sheet
+                                    "COL_IDX": 2 + c_offset + 1, # 1-based col index (Col C is 3)
+                                    "FECHA": fecha,
+                                    "CATEGORIA": cat,
+                                    "DESCRIPCION": observaciones if observaciones else cat,
+                                    "MONTO": monto
+                                })
+                                found_gasto = True
+                        except ValueError:
+                            pass
+                            
+                # Fallback to total if no category columns matched
+                if not found_gasto:
+                    total_val = row[9].strip()
+                    if total_val:
+                        try:
+                            monto = float(total_val.replace("$", "").replace(",", "").strip())
+                            if monto > 0:
+                                records.append({
+                                    "ROW_IDX": r_idx + 3,
+                                    "COL_IDX": 10, # Column J (10)
+                                    "FECHA": fecha,
+                                    "CATEGORIA": "OTROS",
+                                    "DESCRIPCION": observaciones if observaciones else "OTROS",
+                                    "MONTO": monto
+                                })
+                        except ValueError:
+                            pass
+                            
+            return pd.DataFrame(records)
+        except Exception as e:
+            st.sidebar.warning(f"⚠️ Sincronización de Gastos falló. Usando copia local. Detalle: {e}")
             use_gsheets = False
             
-    df.to_csv(csv_filename, index=False)
+    # Local fallback
+    if not os.path.exists(GAS_FILE):
+        pd.DataFrame(columns=["FECHA", "CATEGORIA", "DESCRIPCION", "MONTO"]).to_csv(GAS_FILE, index=False)
+    df = pd.read_csv(GAS_FILE)
+    df['ROW_IDX'] = df.index
+    df['COL_IDX'] = 0
+    return df[["ROW_IDX", "COL_IDX", "FECHA", "CATEGORIA", "DESCRIPCION", "MONTO"]]
+
+def save_gasto_to_sheet(fecha, categoria, descripcion, monto):
+    global use_gsheets
+    # Save locally first
+    if os.path.exists(GAS_FILE):
+        df_local = pd.read_csv(GAS_FILE)
+    else:
+        df_local = pd.DataFrame(columns=["FECHA", "CATEGORIA", "DESCRIPCION", "MONTO"])
+        
+    new_local_expense = {
+        "FECHA": fecha,
+        "CATEGORIA": categoria,
+        "DESCRIPCION": descripcion,
+        "MONTO": monto
+    }
+    df_local = pd.concat([df_local, pd.DataFrame([new_local_expense])], ignore_index=True)
+    df_local.to_csv(GAS_FILE, index=False)
+    st.cache_data.clear()
+    
+    if use_gsheets and sh is not None:
+        try:
+            ws = sh.worksheet("Gastos")
+            current_rows = len(ws.get_all_values())
+            new_row_idx = current_rows + 1
+            
+            category_names = ["CASETA", "GASOLINA", "COCHE", "ESTACIONAMIENTO", "PUBLICIDAD", "OTROS"]
+            cat_vals = [""] * len(category_names)
+            
+            if categoria in category_names:
+                idx = category_names.index(categoria)
+                cat_vals[idx] = monto
+            else:
+                cat_vals[5] = monto
+                
+            new_row = [
+                "", # Col A (1)
+                fecha, # Col B (2)
+                cat_vals[0], # Col C (3, CASETA)
+                cat_vals[1], # Col D (4, GASOLINA)
+                cat_vals[2], # Col E (5, COCHE)
+                cat_vals[3], # Col F (6, ESTACIONAMIENTO)
+                cat_vals[4], # Col G (7, PUBLICIDAD)
+                cat_vals[5], # Col H (8, VARIOS/OTROS)
+                descripcion, # Col I (9, OBSERVACIONES)
+                f"=SUM(C{new_row_idx}:H{new_row_idx})" # Col J (10, TOTAL)
+            ]
+            ws.append_row(new_row, value_input_option="USER_ENTERED")
+            return True
+        except Exception as e:
+            st.sidebar.error(f"❌ Error al guardar gasto en Drive: {e}")
+            use_gsheets = False
+    return False
+
+def update_gasto_in_sheet(row_idx, old_col_idx, new_col_idx, new_fecha, new_monto, new_descripcion):
+    global use_gsheets
+    st.cache_data.clear()
+    
+    # Update locally
+    if os.path.exists(GAS_FILE):
+        df_local = pd.read_csv(GAS_FILE)
+        if not use_gsheets:
+            df_local.at[row_idx, 'FECHA'] = new_fecha
+            category_names = ["CASETA", "GASOLINA", "COCHE", "ESTACIONAMIENTO", "PUBLICIDAD", "OTROS"]
+            new_cat = category_names[new_col_idx - 3] if (3 <= new_col_idx <= 8) else "OTROS"
+            df_local.at[row_idx, 'CATEGORIA'] = new_cat
+            df_local.at[row_idx, 'DESCRIPCION'] = new_descripcion
+            df_local.at[row_idx, 'MONTO'] = new_monto
+            df_local.to_csv(GAS_FILE, index=False)
+            
+    if use_gsheets and sh is not None:
+        try:
+            ws = sh.worksheet("Gastos")
+            ws.update_cell(row_idx, 2, new_fecha)
+            if old_col_idx != new_col_idx:
+                ws.update_cell(row_idx, old_col_idx, "")
+            ws.update_cell(row_idx, new_col_idx, new_monto)
+            ws.update_cell(row_idx, 9, new_descripcion)
+            ws.update_cell(row_idx, 10, f"=SUM(C{row_idx}:H{row_idx})")
+            return True
+        except Exception as e:
+            st.sidebar.error(f"❌ Error al editar gasto en Drive: {e}")
+    else:
+        return not use_gsheets
+    return False
+
+def delete_gasto_in_sheet(row_idx, col_idx):
+    global use_gsheets
+    st.cache_data.clear()
+    
+    # Delete locally
+    if os.path.exists(GAS_FILE):
+        df_local = pd.read_csv(GAS_FILE)
+        if not use_gsheets:
+            df_local = df_local.drop(row_idx)
+            df_local.to_csv(GAS_FILE, index=False)
+            
+    if use_gsheets and sh is not None:
+        try:
+            ws = sh.worksheet("Gastos")
+            ws.update_cell(row_idx, col_idx, "")
+            
+            row_vals = ws.row_values(row_idx)
+            row_vals = row_vals + [""] * (10 - len(row_vals))
+            has_other_gastos = False
+            for c in range(2, 8):
+                if row_vals[c].strip():
+                    has_other_gastos = True
+                    break
+                    
+            if not has_other_gastos:
+                ws.update_cell(row_idx, 2, "") # Fecha
+                ws.update_cell(row_idx, 9, "") # Observaciones
+                ws.update_cell(row_idx, 10, "") # Total
+            else:
+                ws.update_cell(row_idx, 10, f"=SUM(C{row_idx}:H{row_idx})")
+            return True
+        except Exception as e:
+            st.sidebar.error(f"❌ Error al eliminar gasto en Drive: {e}")
+    else:
+        return not use_gsheets
+    return False
+
+@st.cache_data(ttl=600)
+def load_entradas_from_sheet():
+    global use_gsheets
+    entradas_cols = ["ROW_IDX", "CÓDIGO", "PRODUCTO", "DESCRIPCIÓN", "MARCA", "CANTIDAD", "FECHA", "OBSERVACIÓN"]
+    
+    if use_gsheets and sh is not None:
+        try:
+            ws = sh.worksheet("Entradas")
+            all_values = ws.get_all_values()
+            if len(all_values) < 3: # Skip row 0 and 1
+                return pd.DataFrame(columns=entradas_cols)
+                
+            rows = all_values[2:]
+            records = []
+            for idx, row in enumerate(rows, 3):
+                row = row + [""] * (8 - len(row))
+                codigo = row[1].strip()
+                producto = row[2].strip()
+                if not producto:
+                    continue
+                descripcion = row[3].strip()
+                marca = row[4].strip()
+                try:
+                    cantidad = int(float(row[5].replace(",", "").strip()))
+                except ValueError:
+                    cantidad = 0
+                fecha = row[6].strip()
+                observacion = row[7].strip()
+                
+                records.append({
+                    "ROW_IDX": idx,
+                    "CÓDIGO": codigo,
+                    "PRODUCTO": producto,
+                    "DESCRIPCIÓN": descripcion,
+                    "MARCA": marca,
+                    "CANTIDAD": cantidad,
+                    "FECHA": fecha,
+                    "OBSERVACIÓN": observacion
+                })
+            return pd.DataFrame(records)
+        except Exception as e:
+            st.sidebar.warning(f"⚠️ Sincronización de Entradas falló. Usando copia local. Detalle: {e}")
+            use_gsheets = False
+            
+    # Local fallback
+    if not os.path.exists("entradas.csv"):
+        pd.DataFrame(columns=["CÓDIGO", "PRODUCTO", "DESCRIPCIÓN", "MARCA", "CANTIDAD", "FECHA", "OBSERVACIÓN"]).to_csv("entradas.csv", index=False)
+    df = pd.read_csv("entradas.csv")
+    df['ROW_IDX'] = df.index
+    return df[["ROW_IDX", "CÓDIGO", "PRODUCTO", "DESCRIPCIÓN", "MARCA", "CANTIDAD", "FECHA", "OBSERVACIÓN"]]
+
+def save_entrada_to_sheet(codigo, producto, descripcion, marca, cantidad, fecha, observacion):
+    global use_gsheets
+    entradas_cols = ["CÓDIGO", "PRODUCTO", "DESCRIPCIÓN", "MARCA", "CANTIDAD", "FECHA", "OBSERVACIÓN"]
+    
+    if os.path.exists("entradas.csv"):
+        df_local = pd.read_csv("entradas.csv")
+    else:
+        df_local = pd.DataFrame(columns=entradas_cols)
+        
+    new_entry = {
+        "CÓDIGO": codigo,
+        "PRODUCTO": producto,
+        "DESCRIPCIÓN": descripcion,
+        "MARCA": marca,
+        "CANTIDAD": cantidad,
+        "FECHA": fecha,
+        "OBSERVACIÓN": observacion
+    }
+    df_local = pd.concat([df_local, pd.DataFrame([new_entry])], ignore_index=True)
+    df_local.to_csv("entradas.csv", index=False)
+    st.cache_data.clear()
+    
+    if use_gsheets and sh is not None:
+        try:
+            ws = sh.worksheet("Entradas")
+            new_row = ["", codigo, producto, descripcion, marca, cantidad, fecha, observacion]
+            ws.append_row(new_row)
+            return True
+        except Exception as e:
+            st.sidebar.error(f"❌ Error al guardar entrada de stock en Drive: {e}")
+    return False
+
+def update_entrada_in_sheet(row_idx, codigo, producto, descripcion, marca, old_qty, new_qty, new_fecha, new_obs):
+    global use_gsheets
+    st.cache_data.clear()
+    
+    diff = new_qty - old_qty
+    df_productos.loc[df_productos['CÓDIGO'] == codigo, 'STOCK'] += diff
+    save_productos(df_productos)
+    
+    if use_gsheets and sh is not None:
+        try:
+            ws = sh.worksheet("Entradas")
+            ws.update_cell(row_idx, 2, codigo)
+            ws.update_cell(row_idx, 3, producto)
+            ws.update_cell(row_idx, 4, descripcion)
+            ws.update_cell(row_idx, 5, marca)
+            ws.update_cell(row_idx, 6, new_qty)
+            ws.update_cell(row_idx, 7, new_fecha)
+            ws.update_cell(row_idx, 8, new_obs)
+            return True
+        except Exception as e:
+            st.sidebar.error(f"❌ Error al actualizar entrada en Drive: {e}")
+    else:
+        # Local mode update
+        if os.path.exists("entradas.csv"):
+            df_local = pd.read_csv("entradas.csv")
+            df_local.at[row_idx, 'CÓDIGO'] = codigo
+            df_local.at[row_idx, 'PRODUCTO'] = producto
+            df_local.at[row_idx, 'DESCRIPCIÓN'] = descripcion
+            df_local.at[row_idx, 'MARCA'] = marca
+            df_local.at[row_idx, 'CANTIDAD'] = new_qty
+            df_local.at[row_idx, 'FECHA'] = new_fecha
+            df_local.at[row_idx, 'OBSERVACIÓN'] = new_obs
+            df_local.to_csv("entradas.csv", index=False)
+            return True
+    return False
+
+def delete_entrada_in_sheet(row_idx, codigo, qty):
+    global use_gsheets
+    st.cache_data.clear()
+    
+    df_productos.loc[df_productos['CÓDIGO'] == codigo, 'STOCK'] -= qty
+    save_productos(df_productos)
+    
+    if use_gsheets and sh is not None:
+        try:
+            ws = sh.worksheet("Entradas")
+            ws.delete_rows(row_idx)
+            return True
+        except Exception as e:
+            st.sidebar.error(f"❌ Error al eliminar entrada en Drive: {e}")
+    else:
+        # Local mode deletion
+        if os.path.exists("entradas.csv"):
+            df_local = pd.read_csv("entradas.csv")
+            df_local = df_local.drop(row_idx)
+            df_local.to_csv("entradas.csv", index=False)
+            return True
+    return False
 
 # Load Productos (Special because of original structure and stock)
 @st.cache_data(ttl=600)
@@ -277,8 +853,18 @@ def load_productos():
                 return pd.DataFrame(columns=['CÓDIGO', 'PRODUCTO', 'DESCRIPCIÓN', 'MARCA', 'PRECIO COMPRA', 'STOCK'])
             
             headers = [h.strip() for h in all_values[1]]
+            seen = {}
+            dedup_headers = []
+            for h in headers:
+                if h in seen:
+                    seen[h] += 1
+                    dedup_headers.append(f"{h}_{seen[h]}")
+                else:
+                    seen[h] = 0
+                    dedup_headers.append(h)
+                    
             rows = all_values[2:]
-            df = pd.DataFrame(rows, columns=headers)
+            df = pd.DataFrame(rows, columns=dedup_headers)
             
             valid_cols = ['CÓDIGO', 'PRODUCTO', 'DESCRIPCIÓN', 'MARCA', 'PRECIO COMPRA', 'STOCK']
             df = df[[c for c in valid_cols if c in df.columns]]
@@ -319,7 +905,6 @@ def load_productos():
 
 def save_productos(df):
     global use_gsheets
-    # Clear Streamlit cache so next load pulls the new version
     st.cache_data.clear()
     
     cols = ['CÓDIGO', 'PRODUCTO', 'DESCRIPCIÓN', 'MARCA', 'PRECIO COMPRA', 'STOCK']
@@ -327,8 +912,18 @@ def save_productos(df):
     if use_gsheets and worksheet is not None:
         try:
             worksheet.clear()
-            headers = cols
-            data_to_write = [headers] + df.values.tolist()
+            data_to_write = []
+            data_to_write.append(['CÓDIGO', 'PRODUCTO', 'DESCRIPCIÓN', 'MARCA', 'PRECIO COMPRA', 'STOCK', 'PRECIO COMPRA']) # Header row
+            for _, row in df.iterrows():
+                data_to_write.append([
+                    row['CÓDIGO'],
+                    row['PRODUCTO'],
+                    row['DESCRIPCIÓN'],
+                    row['MARCA'],
+                    float(row['PRECIO COMPRA']),
+                    int(row['STOCK']),
+                    float(row['PRECIO COMPRA']) # Write price to Col G for GSheets formulas
+                ])
             worksheet.update('A2', data_to_write)
             return
         except Exception as e:
@@ -337,11 +932,52 @@ def save_productos(df):
             
     df.to_csv(PROD_FILE, index=False)
 
-# Load Databases (Using hashable tuples for column names to enable caching)
+# Load Databases
 df_productos = load_productos()
-df_recibos = load_table("Recibos", ("FOLIO", "FECHA", "CLIENTE", "PRODUCTOS", "TOTAL", "COSTO", "GANANCIA", "TIPO_PAGO", "ESTADO_PAGO", "ABONADO", "PENDIENTE"), REC_FILE)
-df_clientes = load_table("Clientes", ("CLIENTE", "TOTAL_COMPRADO", "METODO_COMUN", "FRECUENCIA", "DEUDA", "ESTADO"), CLI_FILE)
-df_gastos = load_table("Gastos", ("FECHA", "CATEGORIA", "DESCRIPCION", "MONTO"), GAS_FILE)
+df_recibos = load_recibos_from_salidas()
+
+# Helper to build Clientes dynamically from Recibos
+def get_clientes_from_recibos(df_rec):
+    if len(df_rec) == 0:
+        return pd.DataFrame(columns=["CLIENTE", "TOTAL_COMPRADO", "METODO_COMUN", "FRECUENCIA", "DEUDA", "ESTADO"])
+    active_rec = df_rec[df_rec['ESTADO_PAGO'] != "REVOCADO"]
+    records = []
+    for client in active_rec['CLIENTE'].unique():
+        client_receipts = active_rec[active_rec['CLIENTE'] == client]
+        total_comprado = client_receipts['TOTAL'].sum()
+        deuda = client_receipts['PENDIENTE'].sum()
+        estado = "Debe" if deuda > 0 else "Al corriente"
+        
+        metodo_comun = "Contado"
+        if len(client_receipts) > 0:
+            methods = client_receipts['TIPO_PAGO'].value_counts()
+            if len(methods) > 0:
+                metodo_comun = methods.index[0]
+                
+        frecuencia = "Primeras compras"
+        if len(client_receipts) >= 2:
+            dates = pd.to_datetime(client_receipts['FECHA'], format="%d/%m/%Y", errors='coerce').dropna().sort_values()
+            if len(dates) == 0:
+                dates = pd.to_datetime(client_receipts['FECHA'], errors='coerce').dropna().sort_values()
+            diffs = dates.diff().dt.days.dropna()
+            if len(diffs) > 0:
+                avg_days = int(diffs.mean())
+                frecuencia = f"Cada {avg_days} días"
+            else:
+                frecuencia = "Cada 15 días (Estimado)"
+                
+        records.append({
+            "CLIENTE": client,
+            "TOTAL_COMPRADO": total_comprado,
+            "METODO_COMUN": metodo_comun,
+            "FRECUENCIA": frecuencia,
+            "DEUDA": deuda,
+            "ESTADO": estado
+        })
+    return pd.DataFrame(records)
+
+df_clientes = get_clientes_from_recibos(df_recibos)
+df_gastos = load_gastos_from_sheet()
 
 # Ensure correct numeric types
 df_recibos['TOTAL'] = pd.to_numeric(df_recibos['TOTAL'], errors='coerce').fillna(0.0)
@@ -812,47 +1448,20 @@ with tab_fact:
                 "PENDIENTE": pendiente
             }
             
-            df_recibos = pd.concat([df_recibos, pd.DataFrame([new_receipt])], ignore_index=True)
-            save_table(df_recibos, "Recibos", REC_FILE, ["FOLIO", "FECHA", "CLIENTE", "PRODUCTOS", "TOTAL", "COSTO", "GANANCIA", "TIPO_PAGO", "ESTADO_PAGO", "ABONADO", "PENDIENTE"])
-            
-            # 4. Update Clientes Database
-            client_name = st.session_state.client_name
-            # Calculate Frequency based on this client's purchase history
-            client_receipts = df_recibos[df_recibos['CLIENTE'] == client_name]
-            if len(client_receipts) >= 2:
-                dates = pd.to_datetime(client_receipts['FECHA'], errors='coerce').dropna().sort_values()
-                diffs = dates.diff().dt.days.dropna()
-                if len(diffs) > 0:
-                    avg_days = int(diffs.mean())
-                    frecuencia = f"Cada {avg_days} días"
-                else:
-                    frecuencia = "Cada 15 días (Estimado)"
-            else:
-                frecuencia = "Primeras compras"
-            
-            # Recalculate total debt
-            client_debt = df_recibos[df_recibos['CLIENTE'] == client_name]['PENDIENTE'].sum()
-            client_estado = "Debe" if client_debt > 0 else "Al corriente"
-            
-            if client_name in df_clientes['CLIENTE'].values:
-                idx = df_clientes[df_clientes['CLIENTE'] == client_name].index[0]
-                df_clientes.at[idx, 'TOTAL_COMPRADO'] = float(df_clientes.at[idx, 'TOTAL_COMPRADO']) + total_sale
-                df_clientes.at[idx, 'METODO_COMUN'] = st.session_state.payment_term
-                df_clientes.at[idx, 'FRECUENCIA'] = frecuencia
-                df_clientes.at[idx, 'DEUDA'] = client_debt
-                df_clientes.at[idx, 'ESTADO'] = client_estado
-            else:
-                new_client = {
-                    "CLIENTE": client_name,
-                    "TOTAL_COMPRADO": total_sale,
-                    "METODO_COMUN": st.session_state.payment_term,
-                    "FRECUENCIA": frecuencia,
-                    "DEUDA": client_debt,
-                    "ESTADO": client_estado
-                }
-                df_clientes = pd.concat([df_clientes, pd.DataFrame([new_client])], ignore_index=True)
-                
-            save_table(df_clientes, "Clientes", CLI_FILE, ["CLIENTE", "TOTAL_COMPRADO", "METODO_COMUN", "FRECUENCIA", "DEUDA", "ESTADO"])
+            # Save receipt to Salidas sheet and local CSV
+            save_recibo_to_salidas(
+                new_folio,
+                st.session_state.ticket_date,
+                st.session_state.client_name,
+                st.session_state.cart,
+                total_sale,
+                total_cost,
+                total_profit,
+                st.session_state.payment_term,
+                abonado,
+                pendiente,
+                estado_pago
+            )
             
             # 5. Generate Receipt Text for WhatsApp
             receipt_txt = f"""==================================
@@ -959,22 +1568,8 @@ with tab_rec:
                 new_abonado = current_abonado + abono_val
                 new_pendiente = max(0.0, current_total - new_abonado)
                 
-                # Update receipt
-                df_recibos.at[ticket_idx, 'ABONADO'] = new_abonado
-                df_recibos.at[ticket_idx, 'PENDIENTE'] = new_pendiente
-                df_recibos.at[ticket_idx, 'ESTADO_PAGO'] = "Pagado" if new_pendiente == 0.0 else "Por Pagar"
-                
-                # Save receipts
-                save_table(df_recibos, "Recibos", REC_FILE, ["FOLIO", "FECHA", "CLIENTE", "PRODUCTOS", "TOTAL", "COSTO", "GANANCIA", "TIPO_PAGO", "ESTADO_PAGO", "ABONADO", "PENDIENTE"])
-                
-                # Recalculate debts for all clients in df_clientes
-                for c_idx, c_row in df_clientes.iterrows():
-                    c_name = c_row['CLIENTE']
-                    debt = df_recibos[df_recibos['CLIENTE'] == c_name]['PENDIENTE'].sum()
-                    df_clientes.at[c_idx, 'DEUDA'] = debt
-                    df_clientes.at[c_idx, 'ESTADO'] = "Debe" if debt > 0 else "Al corriente"
-                    
-                save_table(df_clientes, "Clientes", CLI_FILE, ["CLIENTE", "TOTAL_COMPRADO", "METODO_COMUN", "FRECUENCIA", "DEUDA", "ESTADO"])
+                # Update abono in Google Sheet and CSV
+                update_abono_in_salidas(selected_folio, new_abonado, new_pendiente, "Pagado" if new_pendiente == 0.0 else "Por Pagar")
                 
                 st.success(f"Abono de ${abono_val:.2f} registrado para el folio {selected_folio}.")
                 st.rerun()
@@ -1019,26 +1614,8 @@ with tab_rec:
                     # Save updated products
                     save_productos(df_productos)
                     
-                    # 2. Modify receipt to mark as REVOCADO and zero out financials
-                    df_recibos.at[ticket_idx, 'PRODUCTOS'] = f"[REVOCADO] {products_summary}"
-                    df_recibos.at[ticket_idx, 'TOTAL'] = 0.0
-                    df_recibos.at[ticket_idx, 'COSTO'] = 0.0
-                    df_recibos.at[ticket_idx, 'GANANCIA'] = 0.0
-                    df_recibos.at[ticket_idx, 'ABONADO'] = 0.0
-                    df_recibos.at[ticket_idx, 'PENDIENTE'] = 0.0
-                    df_recibos.at[ticket_idx, 'ESTADO_PAGO'] = "REVOCADO"
-                    
-                    save_table(df_recibos, "Recibos", REC_FILE, ["FOLIO", "FECHA", "CLIENTE", "PRODUCTOS", "TOTAL", "COSTO", "GANANCIA", "TIPO_PAGO", "ESTADO_PAGO", "ABONADO", "PENDIENTE"])
-                    
-                    # 3. Recalculate all client metrics
-                    for c_idx, c_row in df_clientes.iterrows():
-                        c_name = c_row['CLIENTE']
-                        c_receipts = df_recibos[df_recibos['CLIENTE'] == c_name]
-                        df_clientes.at[c_idx, 'TOTAL_COMPRADO'] = c_receipts['TOTAL'].sum()
-                        df_clientes.at[c_idx, 'DEUDA'] = c_receipts['PENDIENTE'].sum()
-                        df_clientes.at[c_idx, 'ESTADO'] = "Debe" if df_clientes.at[c_idx, 'DEUDA'] > 0 else "Al corriente"
-                        
-                    save_table(df_clientes, "Clientes", CLI_FILE, ["CLIENTE", "TOTAL_COMPRADO", "METODO_COMUN", "FRECUENCIA", "DEUDA", "ESTADO"])
+                    # Revoke receipt in Google Sheet and CSV
+                    revoke_recibo_in_salidas(selected_folio)
                     
                     st.success(f"🎉 Factura {selected_folio} revocada exitosamente. Se devolvieron al inventario: {', '.join(restored_details)}.")
                     st.rerun()
@@ -1059,68 +1636,118 @@ with tab_rec:
 
 # TAB 4: GASTOS OPERATIVOS
 with tab_gastos:
-    st.subheader("Gestión de Gastos y Balance General")
+    st.subheader("💸 Gestión de Gastos y Balance General")
     
-    col_gasto_form, col_balance = st.columns([1, 1.5])
+    subtab_balance, subtab_registrar_g, subtab_editar_g = st.tabs([
+        "📋 Historial y Balance",
+        "➕ Registrar Gasto",
+        "✏️ Editar o Eliminar Gasto"
+    ])
     
-    with col_gasto_form:
+    with subtab_balance:
+        col_list, col_balance = st.columns([1.5, 1])
+        
+        with col_list:
+            st.markdown("#### Historial de Gastos")
+            if len(df_gastos) == 0:
+                st.info("No hay gastos registrados.")
+            else:
+                st.dataframe(
+                    df_gastos[['FECHA', 'CATEGORIA', 'DESCRIPCION', 'MONTO']],
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "MONTO": st.column_config.NumberColumn("Monto", format="$%.2f")
+                    }
+                )
+                
+        with col_balance:
+            st.markdown("#### Balance General")
+            total_ingresos = df_recibos['TOTAL'].sum()
+            total_costos_compra = df_recibos['COSTO'].sum()
+            utilidad_bruta = total_ingresos - total_costos_compra
+            total_gastos_op = df_gastos['MONTO'].sum()
+            utilidad_neta = utilidad_bruta - total_gastos_op
+            
+            st.metric("Ventas Totales (Ingresos)", f"${total_ingresos:,.2f}")
+            st.metric("Costo de Compra", f"${total_costos_compra:,.2f}")
+            st.metric("Utilidad Bruta", f"${utilidad_bruta:,.2f}")
+            st.metric("Gastos Operativos", f"${total_gastos_op:,.2f}")
+            st.metric("Utilidad Neta (Ganancia Real)", f"${utilidad_neta:,.2f}")
+            st.info("📊 *Nota: La Utilidad Neta es la ganancia final del negocio restando el costo de los maicitos y los gastos operativos.*")
+            
+    with subtab_registrar_g:
         st.markdown("#### Registrar Gasto Operativo")
         with st.form("expense_form", clear_on_submit=True):
-            exp_date = st.date_input("Fecha del Gasto:", value=datetime.today().date())
-            exp_cat = st.selectbox("Categoría:", ["GASOLINA", "RENTA", "SERVICIOS", "EXTRA"])
-            exp_desc = st.text_input("Descripción del gasto:", placeholder="Ej. Combustible camión de reparto").strip().upper()
-            exp_amount = st.number_input("Monto ($):", min_value=0.0, step=10.0, value=0.0)
+            exp_date = st.date_input("Fecha del Gasto:", value=datetime.today().date(), key="add_exp_date")
+            exp_cat = st.selectbox("Categoría:", ["GASOLINA", "CASETA", "COCHE", "ESTACIONAMIENTO", "PUBLICIDAD", "OTROS"], key="add_exp_cat")
+            exp_desc = st.text_input("Descripción del gasto:", placeholder="Ej. Combustible camión de reparto", key="add_exp_desc").strip().upper()
+            exp_amount = st.number_input("Monto ($):", min_value=0.0, step=10.0, value=0.0, key="add_exp_amount")
             
             submit_gasto = st.form_submit_button("Guardar Gasto")
-            
             if submit_gasto:
                 if not exp_desc or exp_amount <= 0.0:
                     st.error("Por favor completa la descripción y el monto del gasto.")
                 else:
-                    new_expense = {
-                        "FECHA": exp_date.strftime("%Y-%m-%d"),
-                        "CATEGORIA": exp_cat,
-                        "DESCRIPCION": exp_desc,
-                        "MONTO": exp_amount
-                    }
-                    df_gastos = pd.concat([df_gastos, pd.DataFrame([new_expense])], ignore_index=True)
-                    save_table(df_gastos, "Gastos", GAS_FILE, ["FECHA", "CATEGORIA", "DESCRIPCION", "MONTO"])
-                    st.success(f"Gasto registrado: {exp_cat} por ${exp_amount:.2f}")
+                    formatted_date = f"{exp_date.day}/{exp_date.month}/{exp_date.year}"
+                    save_gasto_to_sheet(formatted_date, exp_cat, exp_desc, exp_amount)
+                    st.success(f"🎉 Gasto registrado: {exp_cat} por ${exp_amount:.2f}")
                     st.rerun()
                     
-        # List Expenses
-        st.markdown("#### Historial de Gastos")
-        st.dataframe(df_gastos, use_container_width=True, hide_index=True)
-        
-    with col_balance:
-        st.markdown("#### Balance General del Negocio")
-        
-        # Financial aggregates
-        total_ingresos = df_recibos['TOTAL'].sum()
-        total_costos_compra = df_recibos['COSTO'].sum()
-        utilidad_bruta = total_ingresos - total_costos_compra
-        total_gastos_op = df_gastos['MONTO'].sum()
-        utilidad_neta = utilidad_bruta - total_gastos_op
-        
-        # Metrics Display
-        col_metric1, col_metric2 = st.columns(2)
-        with col_metric1:
-            st.metric("Ventas Totales (Ingresos)", f"${total_ingresos:,.2f}")
-            st.metric("Utilidad Bruta", f"${utilidad_bruta:,.2f}")
-            st.metric("Gastos Operativos Totales", f"${total_gastos_op:,.2f}")
-        with col_metric2:
-            st.metric("Costo de Compra de Productos", f"${total_costos_compra:,.2f}")
-            st.metric("Utilidad Neta (Ganancia Real)", f"${utilidad_neta:,.2f}")
-            st.write("")
-            st.info("📊 *Nota: La Utilidad Neta es la ganancia final del negocio restando el costo de los maicitos y los gastos operativos (gasolina, servicios, etc).*")
+    with subtab_editar_g:
+        st.markdown("#### Modificar o Eliminar Gasto")
+        if len(df_gastos) == 0:
+            st.info("No hay gastos registrados.")
+        else:
+            gasto_options = []
+            for _, row in df_gastos.iterrows():
+                gasto_options.append(f"{row['ROW_IDX']} - {row['FECHA']} - {row['CATEGORIA']} - {row['DESCRIPCION']} (${row['MONTO']:.2f})")
+                
+            selected_gasto_str = st.selectbox("Selecciona el gasto a editar o eliminar:", gasto_options)
+            sel_row_idx = int(selected_gasto_str.split(" - ")[0])
+            selected_row = df_gastos[df_gastos['ROW_IDX'] == sel_row_idx].iloc[0]
+            
+            g_fecha_parsed = safe_parse_date(selected_row['FECHA'])
+            g_cat = selected_row['CATEGORIA']
+            g_desc = selected_row['DESCRIPCION']
+            g_monto = float(selected_row['MONTO'])
+            old_col_idx = int(selected_row['COL_IDX'])
+            
+            with st.form("edit_expense_form"):
+                e_date = st.date_input("Fecha del Gasto:", value=g_fecha_parsed, key="edit_exp_date")
+                category_options = ["CASETA", "GASOLINA", "COCHE", "ESTACIONAMIENTO", "PUBLICIDAD", "OTROS"]
+                e_cat = st.selectbox("Categoría:", category_options, index=category_options.index(g_cat) if g_cat in category_options else 5, key="edit_exp_cat")
+                e_desc = st.text_input("Descripción del gasto:", value=g_desc, key="edit_exp_desc").strip().upper()
+                e_amount = st.number_input("Monto ($):", min_value=0.01, step=10.0, value=g_monto, key="edit_exp_amount")
+                
+                category_names = ["CASETA", "GASOLINA", "COCHE", "ESTACIONAMIENTO", "PUBLICIDAD", "OTROS"]
+                new_col_idx = 2 + category_names.index(e_cat) + 1
+                
+                c_edit, c_del = st.columns(2)
+                with c_edit:
+                    save_edit = st.form_submit_button("Guardar Cambios")
+                with c_del:
+                    delete_gasto = st.form_submit_button("🗑️ Eliminar Gasto", type="primary")
+                    
+                if save_edit:
+                    formatted_date = f"{e_date.day}/{e_date.month}/{e_date.year}"
+                    update_gasto_in_sheet(sel_row_idx, old_col_idx, new_col_idx, formatted_date, e_amount, e_desc)
+                    st.success("✏️ Gasto modificado exitosamente.")
+                    st.rerun()
+                    
+                if delete_gasto:
+                    delete_gasto_in_sheet(sel_row_idx, old_col_idx)
+                    st.success("🗑️ Gasto eliminado exitosamente.")
+                    st.rerun()
 
 # TAB 5: ADMINISTRAR STOCK
 with tab_stock:
     st.subheader("📦 Administrar Stock e Inventario")
     
-    subtab_entrada, subtab_editar = st.tabs([
+    subtab_entrada, subtab_editar, subtab_historial_entradas = st.tabs([
         "📥 Registrar Entrada (Cajas / Nuevos Productos)",
-        "✏️ Editar o Eliminar Producto"
+        "✏️ Editar o Eliminar Producto",
+        "📋 Historial de Entradas (Editar / Eliminar)"
     ])
     
     with subtab_entrada:
@@ -1129,7 +1756,8 @@ with tab_stock:
         tipo_entrada = st.radio(
             "¿El producto/sabor ya existe o es nuevo?",
             ["Sabor Existente (Reabastecer)", "Nuevo Sabor / Producto (Dar de Alta)"],
-            horizontal=True
+            horizontal=True,
+            key="stock_tipo_entrada"
         )
         
         if tipo_entrada == "Sabor Existente (Reabastecer)":
@@ -1137,7 +1765,6 @@ with tab_stock:
                 st.info("No hay productos registrados en el sistema.")
             else:
                 with st.form("add_stock_form", clear_on_submit=True):
-                    # Select product
                     stock_options = [f"{row['CÓDIGO']} - {row['PRODUCTO']} ({row['DESCRIPCIÓN']})" for _, row in df_productos.iterrows()]
                     selected_stock_prod = st.selectbox("Selecciona el sabor/producto:", stock_options)
                     
@@ -1161,20 +1788,28 @@ with tab_stock:
                     submit_stock = st.form_submit_button("Registrar Entrada")
                     
                     if submit_stock:
-                        # Update stock
                         df_productos.loc[df_productos['CÓDIGO'] == selected_code, 'STOCK'] += qty_added
                         save_productos(df_productos)
                         
-                        # Log expense if checked
+                        today_date = datetime.today()
+                        formatted_date = f"{today_date.day}/{today_date.month}/{today_date.year}"
+                        save_entrada_to_sheet(
+                            selected_code,
+                            prod_row['PRODUCTO'],
+                            desc,
+                            prod_row['MARCA'],
+                            qty_added,
+                            formatted_date,
+                            f"REABASTECER {num_boxes} CAJAS"
+                        )
+                        
                         if record_expense:
-                            new_expense = {
-                                "FECHA": datetime.today().strftime("%Y-%m-%d"),
-                                "CATEGORIA": "COMPRA DE STOCK",
-                                "DESCRIPCION": f"COMPRA {num_boxes} CAJAS - {prod_row['PRODUCTO']} ({desc})",
-                                "MONTO": cost_total
-                            }
-                            df_gastos = pd.concat([df_gastos, pd.DataFrame([new_expense])], ignore_index=True)
-                            save_table(df_gastos, "Gastos", GAS_FILE, ["FECHA", "CATEGORIA", "DESCRIPCION", "MONTO"])
+                            save_gasto_to_sheet(
+                                formatted_date,
+                                "OTROS",
+                                f"COMPRA {num_boxes} CAJAS - {prod_row['PRODUCTO']} ({desc})",
+                                cost_total
+                            )
                             
                         st.success(f"🎉 Se registraron {qty_added} piezas nuevas ({num_boxes} cajas) para '{prod_row['PRODUCTO']}'.")
                         st.rerun()
@@ -1224,16 +1859,25 @@ with tab_stock:
                         df_productos = pd.concat([df_productos, pd.DataFrame([new_item])], ignore_index=True)
                         save_productos(df_productos)
                         
-                        # Log expense if checked and boxes > 0
+                        today_date = datetime.today()
+                        formatted_date = f"{today_date.day}/{today_date.month}/{today_date.year}"
+                        save_entrada_to_sheet(
+                            new_code,
+                            new_name,
+                            new_desc,
+                            new_brand,
+                            qty_added,
+                            formatted_date,
+                            f"NUEVO PRODUCTO - {num_boxes} CAJAS INICIALES"
+                        )
+                        
                         if record_expense and num_boxes > 0:
-                            new_expense = {
-                                "FECHA": datetime.today().strftime("%Y-%m-%d"),
-                                "CATEGORIA": "COMPRA DE STOCK",
-                                "DESCRIPCION": f"COMPRA {num_boxes} CAJAS - {new_name} ({new_desc})",
-                                "MONTO": cost_total
-                            }
-                            df_gastos = pd.concat([df_gastos, pd.DataFrame([new_expense])], ignore_index=True)
-                            save_table(df_gastos, "Gastos", GAS_FILE, ["FECHA", "CATEGORIA", "DESCRIPCION", "MONTO"])
+                            save_gasto_to_sheet(
+                                formatted_date,
+                                "OTROS",
+                                f"COMPRA {num_boxes} CAJAS - {new_name} ({new_desc})",
+                                cost_total
+                            )
                             
                         st.success(f"🎉 Producto '{new_name}' creado con {qty_added} piezas ({num_boxes} cajas) en stock.")
                         st.rerun()
@@ -1290,6 +1934,62 @@ with tab_stock:
                     save_productos(df_productos)
                     st.success(f"🗑️ Producto '{del_name}' eliminado.")
                     st.rerun()
+                    
+    with subtab_historial_entradas:
+        st.markdown("#### Historial de Entradas al Almacén")
+        df_entradas = load_entradas_from_sheet()
+        
+        if len(df_entradas) == 0:
+            st.info("No hay registros de entradas de stock.")
+        else:
+            col_list_ent, col_edit_ent = st.columns([1.5, 1])
+            
+            with col_list_ent:
+                st.dataframe(
+                    df_entradas[['FECHA', 'CÓDIGO', 'PRODUCTO', 'DESCRIPCIÓN', 'CANTIDAD', 'OBSERVACIÓN']],
+                    use_container_width=True,
+                    hide_index=True
+                )
+                
+            with col_edit_ent:
+                st.markdown("##### Editar o Eliminar Entrada")
+                entrada_options = []
+                for _, row in df_entradas.iterrows():
+                    entrada_options.append(f"{row['ROW_IDX']} - {row['FECHA']} - {row['PRODUCTO']} ({row['CANTIDAD']} pz)")
+                    
+                selected_ent_str = st.selectbox("Selecciona la entrada a modificar:", entrada_options)
+                sel_ent_row_idx = int(selected_ent_str.split(" - ")[0])
+                selected_ent_row = df_entradas[df_entradas['ROW_IDX'] == sel_ent_row_idx].iloc[0]
+                
+                ent_fecha_parsed = safe_parse_date(selected_ent_row['FECHA'])
+                ent_qty = int(selected_ent_row['CANTIDAD'])
+                ent_obs = selected_ent_row['OBSERVACIÓN']
+                ent_code = selected_ent_row['CÓDIGO']
+                ent_prod = selected_ent_row['PRODUCTO']
+                ent_desc = selected_ent_row['DESCRIPCIÓN']
+                ent_brand = selected_ent_row['MARCA']
+                
+                with st.form("edit_entrada_form"):
+                    e_ent_date = st.date_input("Fecha:", value=ent_fecha_parsed, key="edit_ent_date")
+                    e_ent_qty = st.number_input("Cantidad (piezas):", min_value=1, step=10, value=ent_qty, key="edit_ent_qty")
+                    e_ent_obs = st.text_input("Observación:", value=ent_obs, key="edit_ent_obs").strip().upper()
+                    
+                    c_ent_edit, c_ent_del = st.columns(2)
+                    with c_ent_edit:
+                        save_ent_edit = st.form_submit_button("Guardar Cambios")
+                    with c_ent_del:
+                        delete_ent = st.form_submit_button("🗑️ Eliminar Entrada", type="primary")
+                        
+                    if save_ent_edit:
+                        formatted_ent_date = f"{e_ent_date.day}/{e_ent_date.month}/{e_ent_date.year}"
+                        update_entrada_in_sheet(sel_ent_row_idx, ent_code, ent_prod, ent_desc, ent_brand, ent_qty, e_ent_qty, formatted_ent_date, e_ent_obs)
+                        st.success("✏️ Entrada modificada exitosamente.")
+                        st.rerun()
+                        
+                    if delete_ent:
+                        delete_entrada_in_sheet(sel_ent_row_idx, ent_code, ent_qty)
+                        st.success("🗑️ Entrada eliminada exitosamente y stock ajustado.")
+                        st.rerun()
 
 # TAB 6: ASISTENTE DE IA (ANTIGRAVITY)
 with tab_ia:
