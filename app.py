@@ -12,55 +12,149 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom Premium Styling
+# Custom Premium Styling (tienda.maicitos.com theme)
 st.markdown("""
 <style>
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700;800&display=swap');
+    
+    /* Global Background and Fonts */
+    .stApp {
+        font-family: 'Poppins', sans-serif !important;
+        background-color: #ffffff !important;
+        color: #1a1a1a !important;
+    }
+    
+    /* Sidebar styling */
+    section[data-testid="stSidebar"] {
+        background-color: #f0fdff !important;
+        border-right: 2px solid #00b4c9;
+    }
+    section[data-testid="stSidebar"] h1, 
+    section[data-testid="stSidebar"] h2, 
+    section[data-testid="stSidebar"] h3, 
+    section[data-testid="stSidebar"] p,
+    section[data-testid="stSidebar"] span,
+    section[data-testid="stSidebar"] label {
+        color: #000000 !important;
+        font-family: 'Poppins', sans-serif !important;
+    }
+    
+    /* Text elements readability */
+    .stApp p, .stApp span, .stApp label, .stApp li, .stApp div[data-testid="stMarkdownContainer"] p {
+        color: #1a1a1a !important;
+    }
+    
+    /* Headings */
+    h1, h2, h3, h4, h5, h6 {
+        font-family: 'Poppins', sans-serif !important;
+        color: #ff7415 !important;
+        font-weight: 700 !important;
+    }
+    
     .main-title {
-        color: #f8fafc;
+        color: #ff7415;
         font-weight: 800;
-        font-size: 2.5rem;
-        margin-bottom: 0.2rem;
+        font-size: 2.6rem;
+        margin-bottom: 0.1rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
     }
     .main-subtitle {
-        color: #94a3b8;
+        color: #666666;
         font-size: 1.1rem;
         margin-bottom: 2rem;
     }
+    
+    /* Metrics card */
     div[data-testid="metric-container"] {
-        background-color: #1e293b;
-        border: 1px solid #334155;
+        background-color: #f8f9fa;
+        border: 2px solid #ff7415;
         padding: 15px;
         border-radius: 12px;
-        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
     }
+    div[data-testid="stMetricValue"] {
+        color: #000000 !important;
+        font-size: 2rem !important;
+        font-weight: 700 !important;
+    }
+    div[data-testid="stMetricLabel"] {
+        color: #666666 !important;
+    }
+    
+    /* Form containers */
     div[data-testid="stForm"] {
-        background-color: #1e293b;
-        border: 1px solid #334155;
+        background-color: #ffffff;
+        border: 2px solid #00b4c9;
         padding: 25px;
         border-radius: 15px;
+        box-shadow: 0 10px 15px -3px rgba(0, 180, 201, 0.05);
     }
+    
+    /* Buttons */
+    div.stButton > button {
+        background-color: #ff7415 !important;
+        color: #ffffff !important;
+        border: none !important;
+        border-radius: 6px !important;
+        font-weight: 600 !important;
+        padding: 10px 24px !important;
+        transition: all 0.3s !important;
+        text-transform: uppercase !important;
+    }
+    div.stButton > button:hover {
+        background-color: #000000 !important;
+        color: #ffffff !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+    }
+    
+    /* Primary buttons (Delete, Reset, Warning) */
+    div.stButton > button[kind="primary"] {
+        background-color: #da3f3f !important;
+        color: #ffffff !important;
+    }
+    div.stButton > button[kind="primary"]:hover {
+        background-color: #000000 !important;
+    }
+
+    /* Input inputs text visibility */
+    .stApp input, .stApp select, .stApp textarea, .stApp div[role="textbox"], .stApp div[data-baseweb="select"] {
+        color: #000000 !important;
+        background-color: #f8f9fa !important;
+    }
+    
+    /* Option lists inside selectors */
+    div[data-baseweb="menu"] li, div[data-baseweb="popover"] div {
+        color: #000000 !important;
+    }
+    
+    /* Badges */
     .badge-green {
-        background-color: #065f46;
-        color: #34d399;
-        padding: 4px 8px;
-        border-radius: 6px;
-        font-weight: bold;
+        background-color: #e6f4ea !important;
+        color: #137333 !important;
+        padding: 4px 10px !important;
+        border-radius: 6px !important;
+        font-weight: bold !important;
+        display: inline-block !important;
     }
     .badge-orange {
-        background-color: #78350f;
-        color: #fbbf24;
-        padding: 4px 8px;
-        border-radius: 6px;
-        font-weight: bold;
+        background-color: #fef3c7 !important;
+        color: #b45309 !important;
+        padding: 4px 10px !important;
+        border-radius: 6px !important;
+        font-weight: bold !important;
+        display: inline-block !important;
     }
     .badge-red {
-        background-color: #7f1d1d;
-        color: #f87171;
-        padding: 4px 8px;
-        border-radius: 6px;
-        font-weight: bold;
+        background-color: #fce8e6 !important;
+        color: #c5221f !important;
+        padding: 4px 10px !important;
+        border-radius: 6px !important;
+        font-weight: bold !important;
+        display: inline-block !important;
     }
 </style>
+
 """, unsafe_allow_html=True)
 
 # File names
