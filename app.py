@@ -363,11 +363,12 @@ with st.sidebar:
     st.write(f"Gastos operativos: {len(df_gastos)}")
 
 # Main Tabs
-tab_dash, tab_fact, tab_rec, tab_gastos, tab_ia = st.tabs([
+tab_dash, tab_fact, tab_rec, tab_gastos, tab_stock, tab_ia = st.tabs([
     "📊 Vista Rápida",
     "🧾 Facturación",
     "📋 Recibos e Historial",
     "💸 Gastos Operativos",
+    "📦 Administrar Stock",
     "🤖 Asistente de IA"
 ])
 
@@ -914,7 +915,184 @@ with tab_gastos:
             st.write("")
             st.info("📊 *Nota: La Utilidad Neta es la ganancia final del negocio restando el costo de los maicitos y los gastos operativos (gasolina, servicios, etc).*")
 
-# TAB 5: ASISTENTE DE IA (ANTIGRAVITY)
+# TAB 5: ADMINISTRAR STOCK
+with tab_stock:
+    st.subheader("📦 Administrar Stock e Inventario")
+    
+    subtab_entrada, subtab_editar = st.tabs([
+        "📥 Registrar Entrada (Cajas / Nuevos Productos)",
+        "✏️ Editar o Eliminar Producto"
+    ])
+    
+    with subtab_entrada:
+        st.markdown("#### Registrar Entrada de Cajas al Inventario")
+        
+        tipo_entrada = st.radio(
+            "¿El producto/sabor ya existe o es nuevo?",
+            ["Sabor Existente (Reabastecer)", "Nuevo Sabor / Producto (Dar de Alta)"],
+            horizontal=True
+        )
+        
+        if tipo_entrada == "Sabor Existente (Reabastecer)":
+            if len(df_productos) == 0:
+                st.info("No hay productos registrados en el sistema.")
+            else:
+                with st.form("add_stock_form", clear_on_submit=True):
+                    # Select product
+                    stock_options = [f"{row['CÓDIGO']} - {row['PRODUCTO']} ({row['DESCRIPCIÓN']})" for _, row in df_productos.iterrows()]
+                    selected_stock_prod = st.selectbox("Selecciona el sabor/producto:", stock_options)
+                    
+                    selected_code = selected_stock_prod.split(" - ")[0]
+                    prod_row = df_productos[df_productos['CÓDIGO'] == selected_code].iloc[0]
+                    desc = prod_row['DESCRIPCIÓN']
+                    is_30gr = "30 GR" in desc.upper()
+                    box_size = 120 if is_30gr else 100
+                    box_cost = 570 if is_30gr else 640
+                    
+                    st.write(f"Stock actual: **{prod_row['STOCK']} pz** (Caja de {box_size} pz)")
+                    
+                    num_boxes = st.number_input("Cantidad de cajas a ingresar:", min_value=1, step=1, value=1)
+                    record_expense = st.checkbox("Registrar automáticamente el costo como gasto del negocio", value=True)
+                    
+                    qty_added = num_boxes * box_size
+                    cost_total = num_boxes * box_cost
+                    
+                    st.info(f"📊 **Resumen:** Se ingresarán **{qty_added} piezas** ({num_boxes} cajas de {box_size} pz). Costo de compra: **${cost_total:,.2f}**.")
+                    
+                    submit_stock = st.form_submit_button("Registrar Entrada")
+                    
+                    if submit_stock:
+                        # Update stock
+                        df_productos.loc[df_productos['CÓDIGO'] == selected_code, 'STOCK'] += qty_added
+                        save_productos(df_productos)
+                        
+                        # Log expense if checked
+                        if record_expense:
+                            new_expense = {
+                                "FECHA": datetime.today().strftime("%Y-%m-%d"),
+                                "CATEGORIA": "COMPRA DE STOCK",
+                                "DESCRIPCION": f"COMPRA {num_boxes} CAJAS - {prod_row['PRODUCTO']} ({desc})",
+                                "MONTO": cost_total
+                            }
+                            df_gastos = pd.concat([df_gastos, pd.DataFrame([new_expense])], ignore_index=True)
+                            save_table(df_gastos, "Gastos", GAS_FILE, ["FECHA", "CATEGORIA", "DESCRIPCION", "MONTO"])
+                            
+                        st.success(f"🎉 Se registraron {qty_added} piezas nuevas ({num_boxes} cajas) para '{prod_row['PRODUCTO']}'.")
+                        st.rerun()
+                        
+        else:
+            with st.form("new_product_stock_form", clear_on_submit=True):
+                st.markdown("##### Detalles del Nuevo Producto / Sabor")
+                col1, col2 = st.columns(2)
+                with col1:
+                    new_code = st.text_input("Código de Producto (Único):", placeholder="Ej. PO09").strip().upper()
+                    new_name = st.text_input("Nombre de Sabor / Producto:", placeholder="Ej. CHIPOTLE").strip().upper()
+                with col2:
+                    new_desc = st.selectbox("Descripción / Tamaño:", ["BOLSA 50 GR", "BOLSA 30 GR"])
+                    new_brand = st.text_input("Marca:", value="MAICITOS").strip().upper()
+                
+                is_30gr = "30 GR" in new_desc.upper()
+                box_size = 120 if is_30gr else 100
+                box_cost = 570 if is_30gr else 640
+                unit_cost = 4.75 if is_30gr else 6.40
+                
+                st.markdown("##### Detalles de Stock Inicial")
+                num_boxes = st.number_input(f"Cantidad de cajas a ingresar (Caja de {box_size} pz):", min_value=0, step=1, value=1)
+                record_expense = st.checkbox("Registrar automáticamente el costo como gasto del negocio", value=True)
+                
+                qty_added = num_boxes * box_size
+                cost_total = num_boxes * box_cost
+                
+                st.info(f"📊 **Resumen:** Se creará el producto con un stock inicial de **{qty_added} piezas** ({num_boxes} cajas de {box_size} pz). Costo de compra: **${cost_total:,.2f}** (Precio compra unitario: **${unit_cost:.2f}**).")
+                
+                submit_new = st.form_submit_button("Crear Producto e Ingresar Stock")
+                
+                if submit_new:
+                    if not new_code or not new_name:
+                        st.error("Por favor completa el código y el nombre del producto.")
+                    elif new_code in df_productos['CÓDIGO'].values:
+                        st.error(f"El código '{new_code}' ya existe.")
+                    else:
+                        new_item = {
+                            "CÓDIGO": new_code,
+                            "PRODUCTO": new_name,
+                            "DESCRIPCIÓN": new_desc,
+                            "MARCA": new_brand,
+                            "PRECIO COMPRA": unit_cost,
+                            "STOCK": qty_added
+                        }
+                        
+                        df_productos = pd.concat([df_productos, pd.DataFrame([new_item])], ignore_index=True)
+                        save_productos(df_productos)
+                        
+                        # Log expense if checked and boxes > 0
+                        if record_expense and num_boxes > 0:
+                            new_expense = {
+                                "FECHA": datetime.today().strftime("%Y-%m-%d"),
+                                "CATEGORIA": "COMPRA DE STOCK",
+                                "DESCRIPCION": f"COMPRA {num_boxes} CAJAS - {new_name} ({new_desc})",
+                                "MONTO": cost_total
+                            }
+                            df_gastos = pd.concat([df_gastos, pd.DataFrame([new_expense])], ignore_index=True)
+                            save_table(df_gastos, "Gastos", GAS_FILE, ["FECHA", "CATEGORIA", "DESCRIPCION", "MONTO"])
+                            
+                        st.success(f"🎉 Producto '{new_name}' creado con {qty_added} piezas ({num_boxes} cajas) en stock.")
+                        st.rerun()
+
+    with subtab_editar:
+        st.markdown("#### Modificar o Eliminar un Producto de la Base de Datos")
+        col_mod, col_el = st.columns(2)
+        
+        with col_mod:
+            st.markdown("**Editar Información**")
+            if len(df_productos) == 0:
+                st.info("No hay productos.")
+            else:
+                product_edit_options = [f"{row['CÓDIGO']} - {row['PRODUCTO']}" for _, row in df_productos.iterrows()]
+                selected_edit_prod = st.selectbox("Producto a editar:", product_edit_options, key="select_edit_prod")
+                
+                edit_code = selected_edit_prod.split(" - ")[0]
+                prod_idx = df_productos[df_productos['CÓDIGO'] == edit_code].index[0]
+                current_prod = df_productos.loc[prod_idx]
+                
+                with st.form("edit_product_details_form"):
+                    e_name = st.text_input("Nombre del Producto:", value=current_prod['PRODUCTO']).strip().upper()
+                    e_desc = st.text_input("Descripción / Tamaño:", value=current_prod['DESCRIPCIÓN']).strip().upper()
+                    e_brand = st.text_input("Marca:", value=current_prod['MARCA']).strip().upper()
+                    e_cost = st.number_input("Precio de Compra ($):", min_value=0.0, step=0.05, value=float(current_prod['PRECIO COMPRA']))
+                    e_stock = st.number_input("Ajustar Stock (piezas):", min_value=0, step=1, value=int(current_prod['STOCK']))
+                    
+                    save_edit = st.form_submit_button("Guardar Cambios")
+                    if save_edit:
+                        df_productos.at[prod_idx, 'PRODUCTO'] = e_name
+                        df_productos.at[prod_idx, 'DESCRIPCIÓN'] = e_desc
+                        df_productos.at[prod_idx, 'MARCA'] = e_brand
+                        df_productos.at[prod_idx, 'PRECIO COMPRA'] = e_cost
+                        df_productos.at[prod_idx, 'STOCK'] = e_stock
+                        save_productos(df_productos)
+                        st.success(f"✏️ Cambios guardados para '{e_name}'.")
+                        st.rerun()
+                        
+        with col_el:
+            st.markdown("**Eliminar Producto**")
+            if len(df_productos) == 0:
+                st.info("No hay productos.")
+            else:
+                product_del_options = [f"{row['CÓDIGO']} - {row['PRODUCTO']}" for _, row in df_productos.iterrows()]
+                selected_del_prod = st.selectbox("Producto a eliminar:", product_del_options, key="select_del_prod")
+                
+                del_code = selected_del_prod.split(" - ")[0]
+                del_name = selected_del_prod.split(" - ")[1]
+                
+                st.warning(f"⚠️ ¿Estás seguro de eliminar permanentemente a **{selected_del_prod}**?")
+                confirm_del = st.button("🗑️ Confirmar Eliminación", type="primary", key="btn_confirm_del")
+                if confirm_del:
+                    df_productos = df_productos[df_productos['CÓDIGO'] != del_code]
+                    save_productos(df_productos)
+                    st.success(f"🗑️ Producto '{del_name}' eliminado.")
+                    st.rerun()
+
+# TAB 6: ASISTENTE DE IA (ANTIGRAVITY)
 with tab_ia:
     st.subheader("🤖 Asistente de IA de tu Negocio")
     
