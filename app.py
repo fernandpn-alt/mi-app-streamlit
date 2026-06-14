@@ -471,7 +471,7 @@ def load_recibos_from_salidas():
     
     if use_gsheets and sh is not None:
         try:
-            ws = sh.worksheet("Salidas")
+            ws = sh.worksheet("SALIDAS")
             all_values = ws.get_all_values()
             
             # Skip first 2 rows (row 0: sum totals, row 1: headers)
@@ -608,7 +608,7 @@ def save_recibo_to_salidas(folio, fecha, cliente, cart, total_sale, total_cost, 
     
     if use_gsheets and sh is not None:
         try:
-            ws = sh.worksheet("Salidas")
+            ws = sh.worksheet("SALIDAS")
             current_rows = len(ws.get_all_values())
             new_row_idx = current_rows + 1
             
@@ -661,7 +661,7 @@ def update_abono_in_salidas(folio, new_abonado, new_pendiente, nuevo_estado):
         
     if use_gsheets and sh is not None:
         try:
-            ws = sh.worksheet("Salidas")
+            ws = sh.worksheet("SALIDAS")
             all_values = ws.get_all_values()
             for i, row in enumerate(all_values):
                 if i < 2:
@@ -697,7 +697,7 @@ def revoke_recibo_in_salidas(folio):
         
     if use_gsheets and sh is not None:
         try:
-            ws = sh.worksheet("Salidas")
+            ws = sh.worksheet("SALIDAS")
             all_values = ws.get_all_values()
             for i, row in enumerate(all_values):
                 if i < 2:
@@ -740,7 +740,7 @@ def load_gastos_from_sheet():
     
     if use_gsheets and sh is not None:
         try:
-            ws = sh.worksheet("Gastos")
+            ws = sh.worksheet("GASTOS")
             all_values = ws.get_all_values()
             if len(all_values) < 3:
                 return pd.DataFrame(columns=gastos_cols)
@@ -828,7 +828,7 @@ def save_gasto_to_sheet(fecha, categoria, descripcion, monto):
     
     if use_gsheets and sh is not None:
         try:
-            ws = sh.worksheet("Gastos")
+            ws = sh.worksheet("GASTOS")
             current_rows = len(ws.get_all_values())
             new_row_idx = current_rows + 1
             
@@ -878,7 +878,7 @@ def update_gasto_in_sheet(row_idx, old_col_idx, new_col_idx, new_fecha, new_mont
             
     if use_gsheets and sh is not None:
         try:
-            ws = sh.worksheet("Gastos")
+            ws = sh.worksheet("GASTOS")
             ws.update_cell(row_idx, 2, new_fecha)
             if old_col_idx != new_col_idx:
                 ws.update_cell(row_idx, old_col_idx, "")
@@ -905,7 +905,7 @@ def delete_gasto_in_sheet(row_idx, col_idx):
             
     if use_gsheets and sh is not None:
         try:
-            ws = sh.worksheet("Gastos")
+            ws = sh.worksheet("GASTOS")
             ws.update_cell(row_idx, col_idx, "")
             
             row_vals = ws.row_values(row_idx)
@@ -936,7 +936,7 @@ def load_entradas_from_sheet():
     
     if use_gsheets and sh is not None:
         try:
-            ws = sh.worksheet("Entradas")
+            ws = sh.worksheet("ENTRADAS")
             all_values = ws.get_all_values()
             if len(all_values) < 3: # Skip row 0 and 1
                 return pd.DataFrame(columns=entradas_cols)
@@ -1004,7 +1004,7 @@ def save_entrada_to_sheet(codigo, producto, descripcion, marca, cantidad, fecha,
     
     if use_gsheets and sh is not None:
         try:
-            ws = sh.worksheet("Entradas")
+            ws = sh.worksheet("ENTRADAS")
             new_row = ["", codigo, producto, descripcion, marca, cantidad, fecha, observacion]
             ws.append_row(new_row)
             return True
@@ -1022,7 +1022,7 @@ def update_entrada_in_sheet(row_idx, codigo, producto, descripcion, marca, old_q
     
     if use_gsheets and sh is not None:
         try:
-            ws = sh.worksheet("Entradas")
+            ws = sh.worksheet("ENTRADAS")
             ws.update_cell(row_idx, 2, codigo)
             ws.update_cell(row_idx, 3, producto)
             ws.update_cell(row_idx, 4, descripcion)
@@ -1057,7 +1057,7 @@ def delete_entrada_in_sheet(row_idx, codigo, qty):
     
     if use_gsheets and sh is not None:
         try:
-            ws = sh.worksheet("Entradas")
+            ws = sh.worksheet("ENTRADAS")
             ws.delete_rows(row_idx)
             return True
         except Exception as e:
