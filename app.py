@@ -462,7 +462,7 @@ with tab_dash:
         </div>
     </div>
     """
-    st.markdown(kpi_html, unsafe_allow_html=True)
+    st.markdown("\n".join([line.strip() for line in kpi_html.split("\n")]), unsafe_allow_html=True)
     
     st.divider()
     
@@ -545,7 +545,7 @@ with tab_dash:
         </div>
         """
     stock_grid_html += '</div>'
-    st.markdown(stock_grid_html, unsafe_allow_html=True)
+    st.markdown("\n".join([line.strip() for line in stock_grid_html.split("\n")]), unsafe_allow_html=True)
 
 # TAB 2: FACTURACIÓN / CREAR TICKET
 with tab_fact:
