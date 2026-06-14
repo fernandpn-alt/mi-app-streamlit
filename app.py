@@ -1223,7 +1223,12 @@ df_gastos['MONTO'] = pd.to_numeric(df_gastos['MONTO'], errors='coerce').fillna(0
 # Sidebar Info
 with st.sidebar:
     st.header("⚙️ Configuración General")
-    api_key = st.text_input("Gemini API Key:", type="password", value=st.secrets.get("gemini_api_key", ""))
+    # Hide input if API key is already loaded in secrets
+    if "gemini_api_key" in st.secrets and st.secrets["gemini_api_key"].strip():
+        api_key = st.secrets["gemini_api_key"].strip()
+        st.success("🤖 Asistente de IA Activo")
+    else:
+        api_key = st.text_input("Gemini API Key:", type="password")
     
     if use_gsheets:
         st.success("🟢 Conectado a Google Sheets")
