@@ -101,17 +101,28 @@ try:
 except Exception as e:
     st.sidebar.error(f"Error conectando a Google Sheets: {e}")
 
+# Helper to safely look up or create worksheets (case-insensitive)
+def get_or_create_worksheet(sheet_name, columns):
+    worksheets = sh.worksheets()
+    target_title = sheet_name.strip().lower()
+    ws = None
+    for w in worksheets:
+        if w.title.strip().lower() == target_title:
+            ws = w
+            break
+            
+    if ws is None:
+        ws = sh.add_worksheet(title=sheet_name, rows=1000, cols=len(columns))
+        # Add headers
+        ws.append_row(columns)
+    return ws
+
 # Helper to load sheet/csv
 def load_table(sheet_name, columns, csv_filename):
     global use_gsheets
     if use_gsheets and sh is not None:
         try:
-            try:
-                ws = sh.worksheet(sheet_name)
-            except gspread.WorksheetNotFound:
-                ws = sh.add_worksheet(title=sheet_name, rows=1000, cols=len(columns))
-                ws.append_row(columns)
-            
+            ws = get_or_create_worksheet(sheet_name, columns)
             all_values = ws.get_all_values()
             if len(all_values) < 2:
                 return pd.DataFrame(columns=columns)
@@ -144,7 +155,7 @@ def save_table(df, sheet_name, csv_filename, columns):
     df = df[columns].copy()
     if use_gsheets and sh is not None:
         try:
-            ws = sh.worksheet(sheet_name)
+            ws = get_or_create_worksheet(sheet_name, columns)
             ws.clear()
             data_to_write = [columns] + df.values.tolist()
             ws.update('A1', data_to_write)
@@ -764,7 +775,7 @@ with tab_gastos:
             exp_date = st.date_input("Fecha del Gasto:", value=datetime.today().date())
             exp_cat = st.selectbox("Categoría:", ["GASOLINA", "RENTA", "SERVICIOS", "EXTRA"])
             exp_desc = st.text_input("Descripción del gasto:", placeholder="Ej. Combustible camión de reparto").strip().upper()
-            exp_amount = st.number_input("Monto ($):", min_value=0.1, step=10.0, value=0.0)
+            exp_amount = st.number_input("Monto ($):", min_value=0.0, step=10.0, value=0.0)
             
             submit_gasto = st.form_submit_button("Guardar Gasto")
             
