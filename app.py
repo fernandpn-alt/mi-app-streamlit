@@ -212,21 +212,23 @@ def get_or_create_worksheet(sheet_name, columns):
     return ws
 
 # Helper to load sheet/csv
+@st.cache_data(ttl=600)
 def load_table(sheet_name, columns, csv_filename):
     global use_gsheets
+    columns_list = list(columns)
     if use_gsheets and sh is not None:
         try:
-            ws = get_or_create_worksheet(sheet_name, columns)
+            ws = get_or_create_worksheet(sheet_name, columns_list)
             all_values = ws.get_all_values()
             if len(all_values) < 2:
-                return pd.DataFrame(columns=columns)
+                return pd.DataFrame(columns=columns_list)
             
             headers = [h.strip() for h in all_values[0]]
             rows = all_values[1:]
             df = pd.DataFrame(rows, columns=headers)
             
-            df = df[[c for c in columns if c in df.columns]]
-            for c in columns:
+            df = df[[c for c in columns_list if c in df.columns]]
+            for c in columns_list:
                 if c not in df.columns:
                     df[c] = ""
             return df
@@ -235,23 +237,27 @@ def load_table(sheet_name, columns, csv_filename):
             use_gsheets = False
             
     if not os.path.exists(csv_filename):
-        pd.DataFrame(columns=columns).to_csv(csv_filename, index=False)
+        pd.DataFrame(columns=columns_list).to_csv(csv_filename, index=False)
     df = pd.read_csv(csv_filename)
     # Ensure all columns exist
-    for c in columns:
+    for c in columns_list:
         if c not in df.columns:
             df[c] = ""
     return df
 
 def save_table(df, sheet_name, csv_filename, columns):
     global use_gsheets
+    # Clear Streamlit cache so next load pulls the new version
+    st.cache_data.clear()
+    
+    columns_list = list(columns)
     # Ensure correct columns and format
-    df = df[columns].copy()
+    df = df[columns_list].copy()
     if use_gsheets and sh is not None:
         try:
-            ws = get_or_create_worksheet(sheet_name, columns)
+            ws = get_or_create_worksheet(sheet_name, columns_list)
             ws.clear()
-            data_to_write = [columns] + df.values.tolist()
+            data_to_write = [columns_list] + df.values.tolist()
             ws.update('A1', data_to_write)
             return
         except Exception as e:
@@ -261,6 +267,7 @@ def save_table(df, sheet_name, csv_filename, columns):
     df.to_csv(csv_filename, index=False)
 
 # Load Productos (Special because of original structure and stock)
+@st.cache_data(ttl=600)
 def load_productos():
     global use_gsheets
     if use_gsheets and worksheet is not None:
@@ -312,6 +319,9 @@ def load_productos():
 
 def save_productos(df):
     global use_gsheets
+    # Clear Streamlit cache so next load pulls the new version
+    st.cache_data.clear()
+    
     cols = ['CÓDIGO', 'PRODUCTO', 'DESCRIPCIÓN', 'MARCA', 'PRECIO COMPRA', 'STOCK']
     df = df[cols].copy()
     if use_gsheets and worksheet is not None:
@@ -327,11 +337,11 @@ def save_productos(df):
             
     df.to_csv(PROD_FILE, index=False)
 
-# Load Databases
+# Load Databases (Using hashable tuples for column names to enable caching)
 df_productos = load_productos()
-df_recibos = load_table("Recibos", ["FOLIO", "FECHA", "CLIENTE", "PRODUCTOS", "TOTAL", "COSTO", "GANANCIA", "TIPO_PAGO", "ESTADO_PAGO", "ABONADO", "PENDIENTE"], REC_FILE)
-df_clientes = load_table("Clientes", ["CLIENTE", "TOTAL_COMPRADO", "METODO_COMUN", "FRECUENCIA", "DEUDA", "ESTADO"], CLI_FILE)
-df_gastos = load_table("Gastos", ["FECHA", "CATEGORIA", "DESCRIPCION", "MONTO"], GAS_FILE)
+df_recibos = load_table("Recibos", ("FOLIO", "FECHA", "CLIENTE", "PRODUCTOS", "TOTAL", "COSTO", "GANANCIA", "TIPO_PAGO", "ESTADO_PAGO", "ABONADO", "PENDIENTE"), REC_FILE)
+df_clientes = load_table("Clientes", ("CLIENTE", "TOTAL_COMPRADO", "METODO_COMUN", "FRECUENCIA", "DEUDA", "ESTADO"), CLI_FILE)
+df_gastos = load_table("Gastos", ("FECHA", "CATEGORIA", "DESCRIPCION", "MONTO"), GAS_FILE)
 
 # Ensure correct numeric types
 df_recibos['TOTAL'] = pd.to_numeric(df_recibos['TOTAL'], errors='coerce').fillna(0.0)
@@ -352,6 +362,9 @@ with st.sidebar:
     
     if use_gsheets:
         st.success("🟢 Conectado a Google Sheets")
+        if st.button("🔄 Sincronizar con Drive (Recargar)", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
     else:
         st.warning("⚠️ Ejecutando en Modo Local")
 
