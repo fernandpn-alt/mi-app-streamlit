@@ -170,6 +170,214 @@ use_gsheets = False
 sh = None
 worksheet = None
 
+# Safe imports for custom service account client in case cryptography compilation is broken locally
+try:
+    import urllib.request
+    import urllib.parse
+    import base64
+    from Crypto.PublicKey import RSA
+    from Crypto.Signature import pkcs1_15
+    from Crypto.Hash import SHA256
+    has_custom_libs = True
+except ImportError:
+    has_custom_libs = False
+
+def b64encode(data):
+    return base64.urlsafe_b64encode(data).decode('utf-8').replace('=', '')
+
+def get_access_token(creds_dict):
+    header = {"alg": "RS256", "typ": "JWT"}
+    now = int(time.time()) if 'time' in globals() else int(datetime.now().timestamp())
+    payload = {
+        "iss": creds_dict["client_email"],
+        "scope": "https://www.googleapis.com/auth/spreadsheets",
+        "aud": creds_dict["token_uri"],
+        "exp": now + 3600,
+        "iat": now
+    }
+    
+    encoded_header = b64encode(json.dumps(header).encode('utf-8'))
+    encoded_payload = b64encode(json.dumps(payload).encode('utf-8'))
+    signing_input = f"{encoded_header}.{encoded_payload}".encode('utf-8')
+    
+    key = RSA.import_key(creds_dict["private_key"])
+    h = SHA256.new(signing_input)
+    signature = pkcs1_15.new(key).sign(h)
+    encoded_signature = b64encode(signature)
+    
+    jwt_token = f"{encoded_header}.{encoded_payload}.{encoded_signature}"
+    
+    post_data = urllib.parse.urlencode({
+        "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
+        "assertion": jwt_token
+    }).encode('utf-8')
+    
+    req = urllib.request.Request(creds_dict["token_uri"], data=post_data, headers={"Content-Type": "application/x-www-form-urlencoded"})
+    with urllib.request.urlopen(req) as response:
+        res = json.loads(response.read().decode('utf-8'))
+        return res["access_token"]
+
+class CustomWorksheet:
+    def __init__(self, spreadsheet_id, sheet_name, sheet_id, access_token):
+        self.spreadsheet_id = spreadsheet_id
+        self.title = sheet_name
+        self.sheet_id = sheet_id
+        self.access_token = access_token
+        
+    def _headers(self):
+        return {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json"
+        }
+        
+    def get_all_values(self):
+        safe_name = urllib.parse.quote(self.title)
+        url = f"https://sheets.googleapis.com/v4/spreadsheets/{self.spreadsheet_id}/values/{safe_name}?valueRenderOption=FORMATTED_VALUE"
+        req = urllib.request.Request(url, headers=self._headers())
+        try:
+            with urllib.request.urlopen(req) as response:
+                res = json.loads(response.read().decode('utf-8'))
+                return res.get("values", [])
+        except Exception as e:
+            raise Exception(f"Error reading values: {e}")
+            
+    def append_row(self, row, value_input_option="USER_ENTERED"):
+        safe_name = urllib.parse.quote(self.title)
+        url = f"https://sheets.googleapis.com/v4/spreadsheets/{self.spreadsheet_id}/values/{safe_name}:append?valueInputOption={value_input_option}"
+        body = json.dumps({
+            "values": [row]
+        }).encode('utf-8')
+        req = urllib.request.Request(url, data=body, headers=self._headers(), method="POST")
+        try:
+            with urllib.request.urlopen(req) as response:
+                return True
+        except Exception as e:
+            raise Exception(f"Error appending row: {e}")
+            
+    def update_cell(self, row, col, value):
+        col_letter = self._col_to_letter(col)
+        cell_range = f"{self.title}!{col_letter}{row}"
+        safe_range = urllib.parse.quote(cell_range)
+        url = f"https://sheets.googleapis.com/v4/spreadsheets/{self.spreadsheet_id}/values/{safe_range}?valueInputOption=USER_ENTERED"
+        body = json.dumps({
+            "values": [[value]]
+        }).encode('utf-8')
+        req = urllib.request.Request(url, data=body, headers=self._headers(), method="PUT")
+        try:
+            with urllib.request.urlopen(req) as response:
+                return True
+        except Exception as e:
+            raise Exception(f"Error updating cell: {e}")
+            
+    def clear(self):
+        safe_name = urllib.parse.quote(self.title)
+        url = f"https://sheets.googleapis.com/v4/spreadsheets/{self.spreadsheet_id}/values/{safe_name}:clear"
+        req = urllib.request.Request(url, headers=self._headers(), method="POST")
+        try:
+            with urllib.request.urlopen(req) as response:
+                return True
+        except Exception as e:
+            raise Exception(f"Error clearing sheet: {e}")
+            
+    def update(self, range_name, values):
+        full_range = f"{self.title}!{range_name}"
+        safe_range = urllib.parse.quote(full_range)
+        url = f"https://sheets.googleapis.com/v4/spreadsheets/{self.spreadsheet_id}/values/{safe_range}?valueInputOption=USER_ENTERED"
+        body = json.dumps({
+            "values": values
+        }).encode('utf-8')
+        req = urllib.request.Request(url, data=body, headers=self._headers(), method="PUT")
+        try:
+            with urllib.request.urlopen(req) as response:
+                return True
+        except Exception as e:
+            raise Exception(f"Error updating range: {e}")
+            
+    def delete_rows(self, row_idx):
+        url = f"https://sheets.googleapis.com/v4/spreadsheets/{self.spreadsheet_id}:batchUpdate"
+        body = json.dumps({
+            "requests": [{
+                "deleteDimension": {
+                    "range": {
+                        "sheetId": self.sheet_id,
+                        "dimension": "ROWS",
+                        "startIndex": row_idx - 1,
+                        "endIndex": row_idx
+                    }
+                }
+            }]
+        }).encode('utf-8')
+        req = urllib.request.Request(url, data=body, headers=self._headers(), method="POST")
+        try:
+            with urllib.request.urlopen(req) as response:
+                return True
+        except Exception as e:
+            raise Exception(f"Error deleting row: {e}")
+            
+    def col_values(self, col, value_render_option="FORMATTED_VALUE"):
+        col_letter = self._col_to_letter(col)
+        cell_range = f"{self.title}!{col_letter}:{col_letter}"
+        safe_range = urllib.parse.quote(cell_range)
+        url = f"https://sheets.googleapis.com/v4/spreadsheets/{self.spreadsheet_id}/values/{safe_range}?valueRenderOption={value_render_option}"
+        req = urllib.request.Request(url, headers=self._headers())
+        try:
+            with urllib.request.urlopen(req) as response:
+                res = json.loads(response.read().decode('utf-8'))
+                values_list = res.get("values", [])
+                return [v[0] if v else "" for v in values_list]
+        except Exception as e:
+            raise Exception(f"Error reading column values: {e}")
+            
+    def _col_to_letter(self, col):
+        letter = ""
+        while col > 0:
+            col, remainder = divmod(col - 1, 26)
+            letter = chr(65 + remainder) + letter
+        return letter
+
+class CustomSpreadsheet:
+    def __init__(self, spreadsheet_url, access_token):
+        parts = spreadsheet_url.split("/d/")
+        if len(parts) > 1:
+            self.id = parts[1].split("/")[0]
+        else:
+            self.id = spreadsheet_url
+        self.access_token = access_token
+        self._worksheets_cache = {}
+        
+    def _headers(self):
+        return {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json"
+        }
+        
+    def worksheets(self):
+        url = f"https://sheets.googleapis.com/v4/spreadsheets/{self.id}"
+        req = urllib.request.Request(url, headers=self._headers())
+        try:
+            with urllib.request.urlopen(req) as response:
+                res = json.loads(response.read().decode('utf-8'))
+                sheets_list = []
+                for s in res.get("sheets", []):
+                    props = s.get("properties", {})
+                    sheet_name = props.get("title")
+                    sheet_id = props.get("sheetId")
+                    ws = CustomWorksheet(self.id, sheet_name, sheet_id, self.access_token)
+                    sheets_list.append(ws)
+                    self._worksheets_cache[sheet_name.lower()] = ws
+                return sheets_list
+        except Exception as e:
+            raise Exception(f"Error fetching worksheets list: {e}")
+            
+    def worksheet(self, title):
+        title_lower = title.lower()
+        if title_lower in self._worksheets_cache:
+            return self._worksheets_cache[title_lower]
+        self.worksheets()
+        if title_lower in self._worksheets_cache:
+            return self._worksheets_cache[title_lower]
+        raise Exception(f"Worksheet not found: {title}")
+
 # Attempt connection to Google Sheets
 try:
     has_secrets = False
@@ -181,39 +389,60 @@ try:
         pass
 
     if has_secrets or has_raw_secrets:
-        import gspread
-        if has_raw_secrets:
-            creds_dict = json.loads(st.secrets["gserviceaccount_raw"])
-            gc = gspread.service_account_from_dict(creds_dict)
-        else:
-            gc = gspread.service_account_from_dict(dict(st.secrets["gserviceaccount"]))
-        
         target_url = st.secrets.get("spreadsheet_url", SHEET_URL)
-        sh = gc.open_by_url(target_url)
-        worksheet = sh.get_worksheet(0)
-        use_gsheets = True
+        
+        # Try standard gspread library first
+        try:
+            import gspread
+            if has_raw_secrets:
+                creds_dict = json.loads(st.secrets["gserviceaccount_raw"])
+            else:
+                creds_dict = dict(st.secrets["gserviceaccount"])
+            
+            gc = gspread.service_account_from_dict(creds_dict)
+            sh = gc.open_by_url(target_url)
+            worksheet = sh.get_worksheet(0)
+            use_gsheets = True
+        except Exception as gspread_err:
+            # Fall back to custom API client using pycryptodome
+            if has_custom_libs:
+                try:
+                    if has_raw_secrets:
+                        creds_dict = json.loads(st.secrets["gserviceaccount_raw"])
+                    else:
+                        creds_dict = dict(st.secrets["gserviceaccount"])
+                    
+                    access_token = get_access_token(creds_dict)
+                    sh = CustomSpreadsheet(target_url, access_token)
+                    worksheet = sh.worksheet("PRODUCTOS")
+                    use_gsheets = True
+                except Exception as custom_err:
+                    raise Exception(f"gspread failed ({gspread_err}) and Custom fallback failed ({custom_err})")
+            else:
+                raise gspread_err
         
         # Repair spreadsheet formulas in the STOCK sheet automatically
-        try:
-            ws_stock = sh.worksheet("STOCK")
-            vals = ws_stock.col_values(6, value_render_option="FORMULA")
-            for i in range(2, len(vals)):
-                row_num = i + 1
-                val = vals[i]
-                if "CRITERIOSTOCK" in val:
-                    ws_stock.update_cell(row_num, 6, f'=IF(B{row_num}<>"",SUMIFS(ENTRADASCANTIDAD,ENTRADASPRODUCTOS,B{row_num}),"")')
-            
-            # Map Row 3-10 to SALIDAS columns to fix missing calculations
-            ws_stock.update_cell(3, 7, "=SUM(SALIDAS!E3:E1000)")
-            ws_stock.update_cell(4, 7, "=SUM(SALIDAS!F3:F1000)")
-            ws_stock.update_cell(5, 7, "=SUM(SALIDAS!G3:G1000)")
-            ws_stock.update_cell(6, 7, "=SUM(SALIDAS!H3:H1000)")
-            ws_stock.update_cell(7, 7, "=SUM(SALIDAS!I3:I1000)")
-            ws_stock.update_cell(8, 7, "=SUM(SALIDAS!J3:J1000)")
-            ws_stock.update_cell(9, 7, "=SUM(SALIDAS!L3:L1000)")
-            ws_stock.update_cell(10, 7, "=SUM(SALIDAS!K3:K1000)")
-        except Exception:
-            pass
+        if use_gsheets and sh is not None:
+            try:
+                ws_stock = sh.worksheet("STOCK")
+                vals = ws_stock.col_values(6, value_render_option="FORMULA")
+                for i in range(2, len(vals)):
+                    row_num = i + 1
+                    val = vals[i]
+                    if "CRITERIOSTOCK" in val:
+                        ws_stock.update_cell(row_num, 6, f'=IF(B{row_num}<>"",SUMIFS(ENTRADASCANTIDAD,ENTRADASPRODUCTOS,B{row_num}),"")')
+                
+                # Map Row 3-10 to SALIDAS columns to fix missing calculations
+                ws_stock.update_cell(3, 7, "=SUM(SALIDAS!E3:E1000)")
+                ws_stock.update_cell(4, 7, "=SUM(SALIDAS!F3:F1000)")
+                ws_stock.update_cell(5, 7, "=SUM(SALIDAS!G3:G1000)")
+                ws_stock.update_cell(6, 7, "=SUM(SALIDAS!H3:H1000)")
+                ws_stock.update_cell(7, 7, "=SUM(SALIDAS!I3:I1000)")
+                ws_stock.update_cell(8, 7, "=SUM(SALIDAS!J3:J1000)")
+                ws_stock.update_cell(9, 7, "=SUM(SALIDAS!L3:L1000)")
+                ws_stock.update_cell(10, 7, "=SUM(SALIDAS!K3:K1000)")
+            except Exception:
+                pass
 except Exception as e:
     st.sidebar.error(f"Error conectando a Google Sheets: {e}")
 
