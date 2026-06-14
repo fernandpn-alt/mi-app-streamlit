@@ -50,15 +50,24 @@ worksheet = None
 # Attempt to connect to Google Sheets using credentials in st.secrets
 try:
     has_secrets = False
+    has_raw_secrets = False
     try:
         has_secrets = "gserviceaccount" in st.secrets
+        has_raw_secrets = "gserviceaccount_raw" in st.secrets
     except Exception:
         pass
 
-    if has_secrets:
+    if has_secrets or has_raw_secrets:
         import gspread
-        # Authenticate using the service account credentials from Streamlit Secrets
-        gc = gspread.service_account_from_dict(dict(st.secrets["gserviceaccount"]))
+        import json
+        
+        if has_raw_secrets:
+            # Parse the entire JSON string directly
+            creds_dict = json.loads(st.secrets["gserviceaccount_raw"])
+            gc = gspread.service_account_from_dict(creds_dict)
+        else:
+            # Authenticate using the service account credentials from Streamlit Secrets (TOML format)
+            gc = gspread.service_account_from_dict(dict(st.secrets["gserviceaccount"]))
         
         # Get sheet URL from secrets or use default
         target_url = st.secrets.get("spreadsheet_url", SHEET_URL)
@@ -321,22 +330,15 @@ with tab_sync:
     5. Copia la dirección de correo de esa cuenta de servicio y **compártele tu Google Sheets en Drive como Editor**.
     
     ### 3. Agregar credenciales a los Secrets de Streamlit
-    Abre tu panel de control en **Streamlit Community Cloud**, entra a la configuración de tu aplicación (*Settings > Secrets*) y pega lo siguiente adaptándolo con los datos de tu JSON descargado:
+    Abre tu panel de control en **Streamlit Community Cloud**, entra a la configuración de tu aplicación (*Settings > Secrets*) y pega lo siguiente:
     
     ```toml
     spreadsheet_url = "{SHEET_URL}"
     
-    [gserviceaccount]
-    type = "service_account"
-    project_id = "tu-proyecto-id"
-    private_key_id = "tu-private-key-id"
-    private_key = "-----BEGIN PRIVATE KEY-----\\nTuLlavePrivada...\\n-----END PRIVATE KEY-----\\n"
-    client_email = "tu-cuenta-de-servicio@proyecto.iam.gserviceaccount.com"
-    client_id = "tu-client-id"
-    auth_uri = "https://accounts.google.com/o/oauth2/auth"
-    token_uri = "https://oauth2.googleapis.com/token"
-    auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
-    client_x509_cert_url = "https://www.googleapis.com/..."
+    gserviceaccount_raw = '''
+    (AQUÍ PEGAS TODO EL CONTENIDO DEL ARCHIVO JSON QUE DESCARGASTE.
+    Borra esto y pega las llaves {{}} completas con toda su información adentro).
+    '''
     ```
     """)
     
