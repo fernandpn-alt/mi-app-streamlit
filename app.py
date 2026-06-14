@@ -396,41 +396,156 @@ def get_stock_badge(stock):
 
 # TAB 1: DASHBOARD / VISTA RÁPIDA
 with tab_dash:
-    st.markdown("### Estado del Inventario")
+    st.markdown("### Resumen General del Negocio")
     
-    # Showcase stats
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        st.metric("Total Productos", len(df_productos))
-    with c2:
-        insuficiente = len(df_productos[df_productos['STOCK'] < 100])
-        st.metric("Productos con Bajo Stock (<100 pz)", insuficiente)
-    with c3:
-        total_piezas = df_productos['STOCK'].sum()
-        st.metric("Total de Piezas en Almacén", f"{total_piezas:,} pz")
-    with c4:
-        val_compra = (df_productos['STOCK'] * df_productos['PRECIO COMPRA']).sum()
-        st.metric("Valor del Inventario (Costo)", f"${val_compra:,.2f}")
+    # Calculate stats
+    total_productos = len(df_productos)
+    insuficiente = len(df_productos[df_productos['STOCK'] < 100])
+    total_piezas = df_productos['STOCK'].sum()
+    val_compra = (df_productos['STOCK'] * df_productos['PRECIO COMPRA']).sum()
+    
+    # Today's stats (exclude revoked receipts)
+    today_str = datetime.today().strftime("%Y-%m-%d")
+    df_today_rec = df_recibos[(df_recibos['FECHA'] == today_str) & (df_recibos['ESTADO_PAGO'] != "REVOCADO")]
+    today_sales_count = len(df_today_rec)
+    today_revenue = df_today_rec['TOTAL'].sum()
+    today_profit = df_today_rec['GANANCIA'].sum()
+    
+    # Debts stats
+    total_debt = df_clientes['DEUDA'].sum()
+    debtor_clients = df_clientes[df_clientes['DEUDA'] > 0]
+    top_debtor = "Ninguno"
+    top_debt_val = 0.0
+    if len(debtor_clients) > 0:
+        idx_max_debt = debtor_clients['DEUDA'].idxmax()
+        top_debtor = debtor_clients.loc[idx_max_debt, 'CLIENTE']
+        top_debt_val = debtor_clients.loc[idx_max_debt, 'DEUDA']
+        
+    # Top selling products
+    from collections import Counter
+    product_counter = Counter()
+    for _, row in df_recibos[df_recibos['ESTADO_PAGO'] != "REVOCADO"].iterrows():
+        products_str = row['PRODUCTOS']
+        parts = products_str.split("; ")
+        for part in parts:
+            if "x " in part:
+                try:
+                    qty_str, prod_name = part.split("x ", 1)
+                    qty = int(qty_str)
+                    product_counter[prod_name.strip().upper()] += qty
+                except Exception:
+                    pass
+    top_selling = product_counter.most_common(3)
+    
+    # HTML for KPI Cards (Responsive CSS Grid, doesn't truncate numbers)
+    kpi_html = f"""
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 25px;">
+        <div style="background: linear-gradient(135deg, #ffffff 0%, #f0fdff 100%); border: 2px solid #00b4c9; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.02); text-align: center; font-family: 'Poppins', sans-serif;">
+            <span style="font-size: 0.8rem; color: #555; font-weight: 600; text-transform: uppercase;">Ventas de Hoy</span>
+            <div style="font-size: 1.8rem; font-weight: 800; color: #00b4c9; margin-top: 5px;">${today_revenue:,.2f}</div>
+            <span style="font-size: 0.75rem; color: #777;">{today_sales_count} ventas registradas</span>
+        </div>
+        <div style="background: linear-gradient(135deg, #ffffff 0%, #fffcf9 100%); border: 2px solid #ff7415; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.02); text-align: center; font-family: 'Poppins', sans-serif;">
+            <span style="font-size: 0.8rem; color: #555; font-weight: 600; text-transform: uppercase;">Por Cobrar (Clientes)</span>
+            <div style="font-size: 1.8rem; font-weight: 800; color: #ff7415; margin-top: 5px;">${total_debt:,.2f}</div>
+            <span style="font-size: 0.75rem; color: #777;">Saldo pendiente de pago</span>
+        </div>
+        <div style="background: linear-gradient(135deg, #ffffff 0%, #f9f9f9 100%); border: 2px solid #666; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.02); text-align: center; font-family: 'Poppins', sans-serif;">
+            <span style="font-size: 0.8rem; color: #555; font-weight: 600; text-transform: uppercase;">Valor en Almacén</span>
+            <div style="font-size: 1.8rem; font-weight: 800; color: #333; margin-top: 5px;">${val_compra:,.2f}</div>
+            <span style="font-size: 0.75rem; color: #777;">Inventario total a precio costo</span>
+        </div>
+        <div style="background: linear-gradient(135deg, #ffffff 0%, #f6fff6 100%); border: 2px solid #10b981; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.02); text-align: center; font-family: 'Poppins', sans-serif;">
+            <span style="font-size: 0.8rem; color: #555; font-weight: 600; text-transform: uppercase;">Stock en Almacén</span>
+            <div style="font-size: 1.8rem; font-weight: 800; color: #10b981; margin-top: 5px;">{total_piezas:,} pz</div>
+            <span style="font-size: 0.75rem; color: #777;">{total_productos} sabores | {insuficiente} bajo stock</span>
+        </div>
+    </div>
+    """
+    st.markdown(kpi_html, unsafe_allow_html=True)
+    
+    st.divider()
+    
+    # Business Statistics Section
+    st.markdown("#### Estadísticas de Ventas y Clientes")
+    col_left, col_right = st.columns(2)
+    
+    with col_left:
+        st.markdown("##### 🏆 Sabores Más Populares (Histórico)")
+        if len(top_selling) == 0:
+            st.info("Aún no hay ventas registradas para calcular sabores populares.")
+        else:
+            for rank, (flavor, qty) in enumerate(top_selling, 1):
+                st.markdown(f"""
+                <div style="background-color: #f8f9fa; padding: 10px 15px; border-radius: 8px; margin-bottom: 8px; border-left: 4px solid #ff7415; font-family: 'Poppins', sans-serif;">
+                    <div style="display: flex; justify-content: space-between; font-weight: 600; font-size: 0.9rem; color: #1a1a1a;">
+                        <span>#{rank} {flavor}</span>
+                        <span style="color: #ff7415;">{qty:,} piezas</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+    with col_right:
+        st.markdown("##### 👥 Resumen de Cartera")
+        total_clientes = len(df_clientes)
+        debtors_count = len(debtor_clients)
+        st.markdown(f"""
+        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #00b4c9; font-family: 'Poppins', sans-serif; height: 100%;">
+            <p style="margin: 0 0 8px 0; font-size: 0.9rem; color: #1a1a1a;">Clientes registrados: <b>{total_clientes}</b></p>
+            <p style="margin: 0 0 8px 0; font-size: 0.9rem; color: #1a1a1a;">Clientes con adeudo: <b style="color: #ef4444;">{debtors_count}</b></p>
+            <p style="margin: 0; font-size: 0.9rem; color: #1a1a1a;">Cliente con mayor deuda: <b>{top_debtor}</b> (${top_debt_val:,.2f})</p>
+        </div>
+        """, unsafe_allow_html=True)
         
     st.divider()
     
+    # Detailed Stock Level (Responsive Cards, never truncates)
     st.markdown("#### Niveles de Stock Detallados")
     
-    # Present a clean list with HTML colored stocks
-    df_show = df_productos.copy()
-    df_show['Estado Stock'] = df_show['STOCK'].apply(
-        lambda x: "🟢 Suficiente (>300)" if x > 300 else ("🟡 Medio (100-300)" if x >= 100 else "🔴 Bajo (<100)")
-    )
-    
-    st.dataframe(
-        df_show[['CÓDIGO', 'PRODUCTO', 'DESCRIPCIÓN', 'MARCA', 'STOCK', 'Estado Stock']],
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "STOCK": st.column_config.NumberColumn("Piezas en Almacén", format="%d pz"),
-            "Estado Stock": st.column_config.TextColumn("Estado de Abastecimiento")
-        }
-    )
+    stock_grid_html = '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px;">'
+    for _, row in df_productos.iterrows():
+        stock = row['STOCK']
+        flavor_name = row['PRODUCTO']
+        code = row['CÓDIGO']
+        description = row['DESCRIPCIÓN']
+        brand = row['MARCA']
+        precio_compra = row['PRECIO COMPRA']
+        stock_value = stock * precio_compra
+        
+        # Color coding
+        if stock > 300:
+            color = "#10b981"  # Emerald green
+            badge_bg = "#e6f4ea"
+            badge_color = "#137333"
+            status_text = "Suficiente"
+        elif stock >= 100:
+            color = "#f59e0b"  # Amber orange
+            badge_bg = "#fef3c7"
+            badge_color = "#b45309"
+            status_text = "Medio"
+        else:
+            color = "#ef4444"  # Red
+            badge_bg = "#fce8e6"
+            badge_color = "#c5221f"
+            status_text = "Bajo Stock"
+            
+        stock_grid_html += f"""
+        <div style="background-color: #ffffff; border-left: 5px solid {color}; border-top: 1px solid #eee; border-right: 1px solid #eee; border-bottom: 1px solid #eee; border-radius: 8px; padding: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); font-family: 'Poppins', sans-serif;">
+            <div style="display: flex; justify-content: space-between; align-items: start;">
+                <div>
+                    <h5 style="margin: 0; font-size: 1.1rem; color: #ff7415; text-transform: uppercase; font-family: 'Poppins', sans-serif;">{flavor_name}</h5>
+                    <span style="font-size: 0.75rem; color: #777;">Código: {code} | {description}</span>
+                </div>
+                <span style="background-color: {badge_bg}; color: {badge_color}; font-size: 0.85rem; font-weight: 700; padding: 3px 8px; border-radius: 4px;">{stock:,} pz</span>
+            </div>
+            <div style="margin-top: 12px; display: flex; justify-content: space-between; font-size: 0.85rem; color: #555;">
+                <span>Valor en almacén: <b>${stock_value:,.2f}</b></span>
+                <span>Estado: <b style="color: {badge_color};">{status_text}</b></span>
+            </div>
+        </div>
+        """
+    stock_grid_html += '</div>'
+    st.markdown(stock_grid_html, unsafe_allow_html=True)
 
 # TAB 2: FACTURACIÓN / CREAR TICKET
 with tab_fact:
@@ -567,15 +682,17 @@ with tab_fact:
             if selected_client == "➕ Nuevo Cliente":
                 new_client_name = st.text_input("Escribe el nombre del nuevo cliente:").strip().upper()
                 
-            # Check if cart contains 30gr product (forces Contado)
+            # Check if cart contains 30gr product (forces Contado and Ya pagó)
             has_30gr_in_cart = any("30 GR" in item["DESCRIPCIÓN"].upper() for item in st.session_state.cart)
             
             # Payment Type Selector
             if has_30gr_in_cart:
-                st.warning("⚠️ Se incluye un producto de 30gr (Fueguito), por lo que toda la venta debe realizarse de CONTADO.")
+                st.warning("⚠️ Se incluye un producto de 30gr (Fueguito), por lo que toda la venta debe realizarse de CONTADO y pagarse inmediatamente.")
                 payment_term = st.selectbox("Tipo de Pago:", ["Contado"], disabled=True)
+                payment_status = st.selectbox("Estado del Pago:", ["Ya pagó"], disabled=True)
             else:
                 payment_term = st.selectbox("Tipo de Pago:", ["Contado", "Consigna"])
+                payment_status = st.selectbox("Estado del Pago:", ["Ya pagó", "Va a pagar (A crédito/consigna)"])
                 
             # Submit to review
             preview_submitted = st.form_submit_button("Generar Vista Previa del Ticket")
@@ -588,6 +705,7 @@ with tab_fact:
                     st.session_state.client_name = client_to_use
                     st.session_state.ticket_date = ticket_date.strftime("%Y-%m-%d")
                     st.session_state.payment_term = payment_term
+                    st.session_state.payment_status = payment_status
                     st.session_state.step = 3
                     st.rerun()
 
@@ -645,6 +763,7 @@ with tab_fact:
             st.write(f"**Fecha:** {st.session_state.ticket_date}")
         with c3:
             st.write(f"**Tipo de venta:** {st.session_state.payment_term}")
+            st.write(f"**Estado del pago:** {st.session_state.payment_status}")
             
         st.divider()
         
@@ -669,12 +788,15 @@ with tab_fact:
             # 3. Add to Receipts
             products_summary = "; ".join([f"{item['CANTIDAD']}x {item['PRODUCTO']}" for item in st.session_state.cart])
             
-            # Calculate payment status
-            # Contado starts as fully paid (ABONADO = TOTAL, PENDIENTE = 0)
-            # Consigna starts as unpaid (ABONADO = 0, PENDIENTE = TOTAL)
-            abonado = total_sale if st.session_state.payment_term == "Contado" else 0.0
-            pendiente = 0.0 if st.session_state.payment_term == "Contado" else total_sale
-            estado_pago = "Pagado" if pendiente == 0.0 else "Por Pagar"
+            # Calculate payment status based on chosen payment status
+            if st.session_state.payment_status == "Ya pagó":
+                abonado = total_sale
+                pendiente = 0.0
+                estado_pago = "Pagado"
+            else:
+                abonado = 0.0
+                pendiente = total_sale
+                estado_pago = "Por Pagar"
             
             new_receipt = {
                 "FOLIO": new_folio,
@@ -856,7 +978,71 @@ with tab_rec:
                 
                 st.success(f"Abono de ${abono_val:.2f} registrado para el folio {selected_folio}.")
                 st.rerun()
-                
+    st.divider()
+    
+    # Section to Revoke Ticket
+    st.markdown("### ⚠️ Revocar Factura / Ticket")
+    # Only show active (non-revoked) tickets
+    active_tickets = df_recibos[df_recibos['ESTADO_PAGO'] != "REVOCADO"]
+    if len(active_tickets) == 0:
+        st.info("No hay recibos activos para revocar.")
+    else:
+        with st.form("revoke_form"):
+            revoke_options = [f"{row['FOLIO']} - {row['CLIENTE']} (Total: ${row['TOTAL']:.2f})" for _, row in active_tickets.iterrows()]
+            selected_revoke_str = st.selectbox("Selecciona el Recibo a Revocar:", revoke_options)
+            confirm_revoke = st.checkbox("Confirmo que deseo revocar esta factura permanentemente y devolver los productos al inventario.")
+            
+            submit_revoke = st.form_submit_button("🚨 Revocar Factura", type="primary")
+            
+            if submit_revoke:
+                if not confirm_revoke:
+                    st.error("Por favor, marca la casilla de confirmación para revocar.")
+                else:
+                    selected_folio = selected_revoke_str.split(" - ")[0]
+                    ticket_idx = df_recibos[df_recibos['FOLIO'] == selected_folio].index[0]
+                    
+                    # 1. Parse products and restore stock
+                    products_summary = df_recibos.at[ticket_idx, 'PRODUCTOS']
+                    parts = products_summary.split("; ")
+                    restored_details = []
+                    for part in parts:
+                        if "x " in part:
+                            qty_str, prod_name = part.split("x ", 1)
+                            qty = int(qty_str)
+                            # Find product
+                            prod_matches = df_productos[df_productos['PRODUCTO'].str.strip().str.upper() == prod_name.strip().upper()]
+                            if len(prod_matches) > 0:
+                                p_idx = prod_matches.index[0]
+                                df_productos.at[p_idx, 'STOCK'] = int(df_productos.at[p_idx, 'STOCK']) + qty
+                                restored_details.append(f"{qty} pz de {prod_name}")
+                    
+                    # Save updated products
+                    save_productos(df_productos)
+                    
+                    # 2. Modify receipt to mark as REVOCADO and zero out financials
+                    df_recibos.at[ticket_idx, 'PRODUCTOS'] = f"[REVOCADO] {products_summary}"
+                    df_recibos.at[ticket_idx, 'TOTAL'] = 0.0
+                    df_recibos.at[ticket_idx, 'COSTO'] = 0.0
+                    df_recibos.at[ticket_idx, 'GANANCIA'] = 0.0
+                    df_recibos.at[ticket_idx, 'ABONADO'] = 0.0
+                    df_recibos.at[ticket_idx, 'PENDIENTE'] = 0.0
+                    df_recibos.at[ticket_idx, 'ESTADO_PAGO'] = "REVOCADO"
+                    
+                    save_table(df_recibos, "Recibos", REC_FILE, ["FOLIO", "FECHA", "CLIENTE", "PRODUCTOS", "TOTAL", "COSTO", "GANANCIA", "TIPO_PAGO", "ESTADO_PAGO", "ABONADO", "PENDIENTE"])
+                    
+                    # 3. Recalculate all client metrics
+                    for c_idx, c_row in df_clientes.iterrows():
+                        c_name = c_row['CLIENTE']
+                        c_receipts = df_recibos[df_recibos['CLIENTE'] == c_name]
+                        df_clientes.at[c_idx, 'TOTAL_COMPRADO'] = c_receipts['TOTAL'].sum()
+                        df_clientes.at[c_idx, 'DEUDA'] = c_receipts['PENDIENTE'].sum()
+                        df_clientes.at[c_idx, 'ESTADO'] = "Debe" if df_clientes.at[c_idx, 'DEUDA'] > 0 else "Al corriente"
+                        
+                    save_table(df_clientes, "Clientes", CLI_FILE, ["CLIENTE", "TOTAL_COMPRADO", "METODO_COMUN", "FRECUENCIA", "DEUDA", "ESTADO"])
+                    
+                    st.success(f"🎉 Factura {selected_folio} revocada exitosamente. Se devolvieron al inventario: {', '.join(restored_details)}.")
+                    st.rerun()
+                    
     st.divider()
     
     # 2. Clients Table
