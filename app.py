@@ -103,52 +103,61 @@ except Exception as e:
 
 # Helper to load sheet/csv
 def load_table(sheet_name, columns, csv_filename):
+    global use_gsheets
     if use_gsheets and sh is not None:
         try:
-            ws = sh.worksheet(sheet_name)
-        except gspread.WorksheetNotFound:
-            ws = sh.add_worksheet(title=sheet_name, rows=1000, cols=len(columns))
-            ws.append_row(columns)
-        
-        all_values = ws.get_all_values()
-        if len(all_values) < 2:
-            return pd.DataFrame(columns=columns)
-        
-        headers = [h.strip() for h in all_values[0]]
-        rows = all_values[1:]
-        df = pd.DataFrame(rows, columns=headers)
-        
-        df = df[[c for c in columns if c in df.columns]]
-        for c in columns:
-            if c not in df.columns:
-                df[c] = ""
-        return df
-    else:
-        if not os.path.exists(csv_filename):
-            pd.DataFrame(columns=columns).to_csv(csv_filename, index=False)
-        df = pd.read_csv(csv_filename)
-        # Ensure all columns exist
-        for c in columns:
-            if c not in df.columns:
-                df[c] = ""
-        return df
+            try:
+                ws = sh.worksheet(sheet_name)
+            except gspread.WorksheetNotFound:
+                ws = sh.add_worksheet(title=sheet_name, rows=1000, cols=len(columns))
+                ws.append_row(columns)
+            
+            all_values = ws.get_all_values()
+            if len(all_values) < 2:
+                return pd.DataFrame(columns=columns)
+            
+            headers = [h.strip() for h in all_values[0]]
+            rows = all_values[1:]
+            df = pd.DataFrame(rows, columns=headers)
+            
+            df = df[[c for c in columns if c in df.columns]]
+            for c in columns:
+                if c not in df.columns:
+                    df[c] = ""
+            return df
+        except Exception as e:
+            st.sidebar.warning(f"⚠️ Sincronización de tabla '{sheet_name}' falló. Usando copia local. Detalle: {e}")
+            use_gsheets = False
+            
+    if not os.path.exists(csv_filename):
+        pd.DataFrame(columns=columns).to_csv(csv_filename, index=False)
+    df = pd.read_csv(csv_filename)
+    # Ensure all columns exist
+    for c in columns:
+        if c not in df.columns:
+            df[c] = ""
+    return df
 
 def save_table(df, sheet_name, csv_filename, columns):
+    global use_gsheets
     # Ensure correct columns and format
     df = df[columns].copy()
     if use_gsheets and sh is not None:
         try:
             ws = sh.worksheet(sheet_name)
-        except gspread.WorksheetNotFound:
-            ws = sh.add_worksheet(title=sheet_name, rows=1000, cols=len(columns))
-        ws.clear()
-        data_to_write = [columns] + df.values.tolist()
-        ws.update('A1', data_to_write)
-    else:
-        df.to_csv(csv_filename, index=False)
+            ws.clear()
+            data_to_write = [columns] + df.values.tolist()
+            ws.update('A1', data_to_write)
+            return
+        except Exception as e:
+            st.sidebar.error(f"❌ Error guardando '{sheet_name}' en Drive: {e}. Guardando copia local.")
+            use_gsheets = False
+            
+    df.to_csv(csv_filename, index=False)
 
 # Load Productos (Special because of original structure and stock)
 def load_productos():
+    global use_gsheets
     if use_gsheets and worksheet is not None:
         try:
             all_values = worksheet.get_all_values()
@@ -175,7 +184,8 @@ def load_productos():
             df['STOCK'] = pd.to_numeric(df['STOCK'], errors='coerce').fillna(350).astype(int)
             return df
         except Exception as e:
-            st.error(f"Error cargando Productos de Sheets: {e}")
+            st.sidebar.warning(f"⚠️ Sincronización de Productos falló. Usando copia local. Detalle: {e}")
+            use_gsheets = False
             
     if not os.path.exists(PROD_FILE):
         try:
@@ -196,6 +206,7 @@ def load_productos():
     return df
 
 def save_productos(df):
+    global use_gsheets
     cols = ['CÓDIGO', 'PRODUCTO', 'DESCRIPCIÓN', 'MARCA', 'PRECIO COMPRA', 'STOCK']
     df = df[cols].copy()
     if use_gsheets and worksheet is not None:
@@ -204,10 +215,12 @@ def save_productos(df):
             headers = cols
             data_to_write = [headers] + df.values.tolist()
             worksheet.update('A2', data_to_write)
+            return
         except Exception as e:
-            st.error(f"Error al guardar Productos en Sheets: {e}")
-    else:
-        df.to_csv(PROD_FILE, index=False)
+            st.sidebar.error(f"❌ Error al guardar Productos en Sheets: {e}. Guardando copia local.")
+            use_gsheets = False
+            
+    df.to_csv(PROD_FILE, index=False)
 
 # Load Databases
 df_productos = load_productos()
