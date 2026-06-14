@@ -48,8 +48,14 @@ use_gsheets = False
 worksheet = None
 
 # Attempt to connect to Google Sheets using credentials in st.secrets
-if "gserviceaccount" in st.secrets:
+try:
+    has_secrets = False
     try:
+        has_secrets = "gserviceaccount" in st.secrets
+    except Exception:
+        pass
+
+    if has_secrets:
         import gspread
         # Authenticate using the service account credentials from Streamlit Secrets
         gc = gspread.service_account_from_dict(dict(st.secrets["gserviceaccount"]))
@@ -59,8 +65,9 @@ if "gserviceaccount" in st.secrets:
         sh = gc.open_by_url(target_url)
         worksheet = sh.get_worksheet(0)
         use_gsheets = True
-    except Exception as e:
-        st.sidebar.error(f"Error conectando a Google Sheets: {e}")
+except Exception as e:
+    st.sidebar.error(f"Error conectando a Google Sheets: {e}")
+
 
 # Function to load data
 def load_data():
