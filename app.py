@@ -378,73 +378,97 @@ class CustomSpreadsheet:
             return self._worksheets_cache[title_lower]
         raise Exception(f"Worksheet not found: {title}")
 
-# Attempt connection to Google Sheets
-try:
-    has_secrets = False
-    has_raw_secrets = False
+# Cache Sheets connection and formulas repair to optimize API usage
+@st.cache_resource(ttl=1800)
+def get_sheets_connection(url):
+    local_use_gsheets = False
+    local_sh = None
+    local_worksheet = None
+    error_msg = None
     try:
-        has_secrets = "gserviceaccount" in st.secrets
-        has_raw_secrets = "gserviceaccount_raw" in st.secrets
-    except Exception:
-        pass
-
-    if has_secrets or has_raw_secrets:
-        target_url = st.secrets.get("spreadsheet_url", SHEET_URL)
-        
-        # Try standard gspread library first
+        has_secrets = False
+        has_raw_secrets = False
         try:
-            import gspread
-            if has_raw_secrets:
-                creds_dict = json.loads(st.secrets["gserviceaccount_raw"])
-            else:
-                creds_dict = dict(st.secrets["gserviceaccount"])
+            has_secrets = "gserviceaccount" in st.secrets
+            has_raw_secrets = "gserviceaccount_raw" in st.secrets
+        except Exception:
+            pass
+
+        if has_secrets or has_raw_secrets:
+            target_url = st.secrets.get("spreadsheet_url", url)
             
-            gc = gspread.service_account_from_dict(creds_dict)
-            sh = gc.open_by_url(target_url)
-            worksheet = sh.get_worksheet(0)
-            use_gsheets = True
-        except Exception as gspread_err:
-            # Fall back to custom API client using pycryptodome
-            if has_custom_libs:
-                try:
-                    if has_raw_secrets:
-                        creds_dict = json.loads(st.secrets["gserviceaccount_raw"])
-                    else:
-                        creds_dict = dict(st.secrets["gserviceaccount"])
-                    
-                    access_token = get_access_token(creds_dict)
-                    sh = CustomSpreadsheet(target_url, access_token)
-                    worksheet = sh.worksheet("PRODUCTOS")
-                    use_gsheets = True
-                except Exception as custom_err:
-                    raise Exception(f"gspread failed ({gspread_err}) and Custom fallback failed ({custom_err})")
-            else:
-                raise gspread_err
-        
-        # Repair spreadsheet formulas in the STOCK sheet automatically
-        if use_gsheets and sh is not None:
+            # Try standard gspread library first
             try:
-                ws_stock = sh.worksheet("STOCK")
-                vals = ws_stock.col_values(6, value_render_option="FORMULA")
-                for i in range(2, len(vals)):
-                    row_num = i + 1
-                    val = vals[i]
-                    if "CRITERIOSTOCK" in val:
-                        ws_stock.update_cell(row_num, 6, f'=IF(B{row_num}<>"",SUMIFS(ENTRADASCANTIDAD,ENTRADASPRODUCTOS,B{row_num}),"")')
+                import gspread
+                if has_raw_secrets:
+                    creds_dict = json.loads(st.secrets["gserviceaccount_raw"])
+                else:
+                    creds_dict = dict(st.secrets["gserviceaccount"])
                 
-                # Map Row 3-10 to SALIDAS columns to fix missing calculations
-                ws_stock.update_cell(3, 7, "=SUM(SALIDAS!E3:E1000)")
-                ws_stock.update_cell(4, 7, "=SUM(SALIDAS!F3:F1000)")
-                ws_stock.update_cell(5, 7, "=SUM(SALIDAS!G3:G1000)")
-                ws_stock.update_cell(6, 7, "=SUM(SALIDAS!H3:H1000)")
-                ws_stock.update_cell(7, 7, "=SUM(SALIDAS!I3:I1000)")
-                ws_stock.update_cell(8, 7, "=SUM(SALIDAS!J3:J1000)")
-                ws_stock.update_cell(9, 7, "=SUM(SALIDAS!L3:L1000)")
-                ws_stock.update_cell(10, 7, "=SUM(SALIDAS!K3:K1000)")
-            except Exception:
-                pass
-except Exception as e:
-    st.sidebar.error(f"Error conectando a Google Sheets: {e}")
+                gc = gspread.service_account_from_dict(creds_dict)
+                local_sh = gc.open_by_url(target_url)
+                local_worksheet = local_sh.get_worksheet(0)
+                local_use_gsheets = True
+            except Exception as gspread_err:
+                # Fall back to custom API client using pycryptodome
+                if has_custom_libs:
+                    try:
+                        if has_raw_secrets:
+                            creds_dict = json.loads(st.secrets["gserviceaccount_raw"])
+                        else:
+                            creds_dict = dict(st.secrets["gserviceaccount"])
+                        
+                        access_token = get_access_token(creds_dict)
+                        local_sh = CustomSpreadsheet(target_url, access_token)
+                        local_worksheet = local_sh.worksheet("PRODUCTOS")
+                        local_use_gsheets = True
+                    except Exception as custom_err:
+                        raise Exception(f"gspread failed ({gspread_err}) and Custom fallback failed ({custom_err})")
+                else:
+                    raise gspread_err
+            
+            # Repair spreadsheet formulas in the STOCK sheet automatically
+            if local_use_gsheets and local_sh is not None:
+                try:
+                    ws_stock = local_sh.worksheet("STOCK")
+                    vals = ws_stock.col_values(6, value_render_option="FORMULA")
+                    for i in range(2, len(vals)):
+                        row_num = i + 1
+                        val = vals[i]
+                        if "CRITERIOSTOCK" in val:
+                            ws_stock.update_cell(row_num, 6, f'=IF(B{row_num}<>"",SUMIFS(ENTRADASCANTIDAD,ENTRADASPRODUCTOS,B{row_num}),"")')
+                    
+                    # Map Row 3-10 to SALIDAS columns to fix missing calculations using batch update
+                    formulas = [
+                        ["=SUM(SALIDAS!E3:E1000)"],
+                        ["=SUM(SALIDAS!F3:F1000)"],
+                        ["=SUM(SALIDAS!G3:G1000)"],
+                        ["=SUM(SALIDAS!H3:H1000)"],
+                        ["=SUM(SALIDAS!I3:I1000)"],
+                        ["=SUM(SALIDAS!J3:J1000)"],
+                        ["=SUM(SALIDAS!L3:L1000)"],
+                        ["=SUM(SALIDAS!K3:K1000)"]
+                    ]
+                    try:
+                        ws_stock.update("G3:G10", formulas)
+                    except Exception:
+                        ws_stock.update_cell(3, 7, "=SUM(SALIDAS!E3:E1000)")
+                        ws_stock.update_cell(4, 7, "=SUM(SALIDAS!F3:F1000)")
+                        ws_stock.update_cell(5, 7, "=SUM(SALIDAS!G3:G1000)")
+                        ws_stock.update_cell(6, 7, "=SUM(SALIDAS!H3:H1000)")
+                        ws_stock.update_cell(7, 7, "=SUM(SALIDAS!I3:I1000)")
+                        ws_stock.update_cell(8, 7, "=SUM(SALIDAS!J3:J1000)")
+                        ws_stock.update_cell(9, 7, "=SUM(SALIDAS!L3:L1000)")
+                        ws_stock.update_cell(10, 7, "=SUM(SALIDAS!K3:K1000)")
+                except Exception:
+                    pass
+    except Exception as e:
+        error_msg = str(e)
+    return local_use_gsheets, local_sh, local_worksheet, error_msg
+
+use_gsheets, sh, worksheet, conn_error = get_sheets_connection(SHEET_URL)
+if conn_error:
+    st.sidebar.error(f"Error conectando a Google Sheets: {conn_error}")
 
 # Helper to safely look up or create worksheets (case-insensitive)
 def get_or_create_worksheet(sheet_name, columns):
@@ -1540,44 +1564,43 @@ with tab_fact:
             st.session_state.step = 1
             st.rerun()
             
-        with st.form("billing_form"):
-            # Date Selector
-            ticket_date = st.date_input("Fecha de emisión del ticket:", value=datetime.today().date())
+        # Date Selector
+        ticket_date = st.date_input("Fecha de emisión del ticket:", value=datetime.today().date())
+        
+        # Client Selector
+        client_list = ["➕ Nuevo Cliente"] + sorted(df_clientes["CLIENTE"].unique().tolist())
+        selected_client = st.selectbox("Cliente:", client_list)
+        
+        new_client_name = ""
+        if selected_client == "➕ Nuevo Cliente":
+            new_client_name = st.text_input("Escribe el nombre del nuevo cliente:").strip().upper()
             
-            # Client Selector
-            client_list = ["➕ Nuevo Cliente"] + sorted(df_clientes["CLIENTE"].unique().tolist())
-            selected_client = st.selectbox("Cliente:", client_list)
+        # Check if cart contains 30gr product (forces Contado and Ya pagó)
+        has_30gr_in_cart = any("30 GR" in item["DESCRIPCIÓN"].upper() for item in st.session_state.cart)
+        
+        # Payment Type Selector
+        if has_30gr_in_cart:
+            st.warning("⚠️ Se incluye un producto de 30gr (Fueguito), por lo que toda la venta debe realizarse de CONTADO y pagarse inmediatamente.")
+            payment_term = st.selectbox("Tipo de Pago:", ["Contado"], disabled=True)
+            payment_status = st.selectbox("Estado del Pago:", ["Ya pagó"], disabled=True)
+        else:
+            payment_term = st.selectbox("Tipo de Pago:", ["Contado", "Consigna"])
+            payment_status = st.selectbox("Estado del Pago:", ["Ya pagó", "Va a pagar (A crédito/consigna)"])
             
-            new_client_name = ""
-            if selected_client == "➕ Nuevo Cliente":
-                new_client_name = st.text_input("Escribe el nombre del nuevo cliente:").strip().upper()
-                
-            # Check if cart contains 30gr product (forces Contado and Ya pagó)
-            has_30gr_in_cart = any("30 GR" in item["DESCRIPCIÓN"].upper() for item in st.session_state.cart)
-            
-            # Payment Type Selector
-            if has_30gr_in_cart:
-                st.warning("⚠️ Se incluye un producto de 30gr (Fueguito), por lo que toda la venta debe realizarse de CONTADO y pagarse inmediatamente.")
-                payment_term = st.selectbox("Tipo de Pago:", ["Contado"], disabled=True)
-                payment_status = st.selectbox("Estado del Pago:", ["Ya pagó"], disabled=True)
+        # Submit to review
+        preview_submitted = st.button("Generar Vista Previa del Ticket", type="primary")
+        
+        if preview_submitted:
+            client_to_use = new_client_name if selected_client == "➕ Nuevo Cliente" else selected_client
+            if not client_to_use:
+                st.error("⚠️ Debes proporcionar un nombre de cliente.")
             else:
-                payment_term = st.selectbox("Tipo de Pago:", ["Contado", "Consigna"])
-                payment_status = st.selectbox("Estado del Pago:", ["Ya pagó", "Va a pagar (A crédito/consigna)"])
-                
-            # Submit to review
-            preview_submitted = st.form_submit_button("Generar Vista Previa del Ticket")
-            
-            if preview_submitted:
-                client_to_use = new_client_name if selected_client == "➕ Nuevo Cliente" else selected_client
-                if not client_to_use:
-                    st.error("⚠️ Debes proporcionar un nombre de cliente.")
-                else:
-                    st.session_state.client_name = client_to_use
-                    st.session_state.ticket_date = ticket_date.strftime("%Y-%m-%d")
-                    st.session_state.payment_term = payment_term
-                    st.session_state.payment_status = payment_status
-                    st.session_state.step = 3
-                    st.rerun()
+                st.session_state.client_name = client_to_use
+                st.session_state.ticket_date = ticket_date.strftime("%Y-%m-%d")
+                st.session_state.payment_term = payment_term
+                st.session_state.payment_status = payment_status
+                st.session_state.step = 3
+                st.rerun()
 
     # WIZARD STEP 3: Preview and Finalize
     elif st.session_state.step == 3:
@@ -1703,7 +1726,7 @@ with tab_fact:
 ==================================
 Folio: {new_folio}
 Fecha: {st.session_state.ticket_date}
-Cliente: {client_name}
+Cliente: {st.session_state.client_name}
 Tipo de venta: {st.session_state.payment_term}
 Estado: {estado_pago}
 
@@ -1816,8 +1839,18 @@ with tab_rec:
     if len(active_tickets) == 0:
         st.info("No hay recibos activos para revocar.")
     else:
+        # Sort by Folio number descending (newest first) to guarantee correct order
+        def get_folio_num(folio_str):
+            try:
+                return int(''.join(filter(str.isdigit, str(folio_str))))
+            except Exception:
+                return 0
+        active_tickets_sorted = active_tickets.copy()
+        active_tickets_sorted['FOLIO_NUM'] = active_tickets_sorted['FOLIO'].apply(get_folio_num)
+        active_tickets_sorted = active_tickets_sorted.sort_values(by='FOLIO_NUM', ascending=False)
+        
         with st.form("revoke_form"):
-            revoke_options = [f"{row['FOLIO']} - {row['CLIENTE']} (Total: ${row['TOTAL']:.2f})" for _, row in active_tickets.iterrows()]
+            revoke_options = [f"{row['FOLIO']} - {row['CLIENTE']} (Total: ${row['TOTAL']:.2f})" for _, row in active_tickets_sorted.iterrows()]
             selected_revoke_str = st.selectbox("Selecciona el Recibo a Revocar:", revoke_options)
             confirm_revoke = st.checkbox("Confirmo que deseo revocar esta factura permanentemente y devolver los productos al inventario.")
             
