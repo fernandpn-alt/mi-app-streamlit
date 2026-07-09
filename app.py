@@ -2250,7 +2250,7 @@ with tab_stock:
                 qty_added = num_boxes * box_size
                 cost_total = num_boxes * box_cost
                 
-                st.info(f"📊 **Resumen:** Se creará el producto con un stock inicial de **{qty_added} piezas** ({num_boxes} cajas de {box_size} pz). Costo de compra: **${cost_total:,.2f}** (Precio compra unitario: **${unit_cost:.2f}**).")
+                st.info(f"📊 Resumen: Se ingresarán {qty_added} piezas ({num_boxes} cajas de {box_size} pz). Costo de compra: ${cost_total:,.2f} (Precio unitario: ${unit_cost:.2f}).")
                 
                 submit_new = st.form_submit_button("Crear Producto e Ingresar Stock")
                 
