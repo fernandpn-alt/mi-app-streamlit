@@ -68,24 +68,27 @@ st.markdown("""
         box-shadow: 0 8px 25px rgba(46, 27, 18, 0.06) !important;
     }
     
-    /* Sidebar styling as dark brown panel */
+    /* Sidebar styling as warm light beige panel (so black logo is visible) */
     section[data-testid="stSidebar"] {
-        background-color: #2e1b12 !important;
-        border-right: 3px solid #ffd200 !important;
+        background-color: #f3ede2 !important;
+        border-right: 2px solid #ffd200 !important;
     }
     section[data-testid="stSidebar"] h1, 
     section[data-testid="stSidebar"] h2, 
     section[data-testid="stSidebar"] h3, 
     section[data-testid="stSidebar"] p,
-    section[data-testid="stSidebar"] label,
-    section[data-testid="stSidebar"] div,
-    section[data-testid="stSidebar"] span {
-        color: #f5efe6 !important;
+    section[data-testid="stSidebar"] label {
+        color: #2e1b12 !important;
         font-family: 'Poppins', sans-serif !important;
     }
-    /* Collapse button fix */
+    section[data-testid="stSidebar"] .stMarkdown p,
+    section[data-testid="stSidebar"] label,
+    section[data-testid="stSidebar"] span:not([data-testid="stIconMaterial"]) {
+        color: #2e1b12 !important;
+    }
+    /* Collapse button arrow color */
     section[data-testid="stSidebar"] button[data-testid="stSidebarCollapseButton"] span {
-        color: #ffd200 !important;
+        color: #2e1b12 !important;
     }
     
     /* Text elements readability */
@@ -1527,18 +1530,6 @@ with tab_dash:
             badge_color = "#c5221f"
             status_text = "Bajo Stock"
             
-        # Select product image URL from tienda.maicitos.com
-        img_url = "https://tienda.maicitos.com/cdn/shop/files/maicito-icon-icon-2_1.png?v=1681741526"
-        name_upper = flavor_name.upper()
-        if "FUEGO" in name_upper or "FUEGUITO" in name_upper:
-            img_url = "https://cdn.shopify.com/s/files/1/0746/0850/9218/files/Churritos_fuego_en_lonchera.png?v=1776728522"
-        elif "JALAP" in name_upper:
-            img_url = "https://cdn.shopify.com/s/files/1/0746/0850/9218/files/Chips_jicama.jpg?v=1776728522"
-        elif "RANCH" in name_upper or "NATURAL" in name_upper:
-            img_url = "https://cdn.shopify.com/s/files/1/0746/0850/9218/files/WhatsAppImage2026-04-17at2.12.27PM_1.jpg?v=1776727032"
-        elif "QUESO" in name_upper or "NEGR" in name_upper or "PIQ" in name_upper:
-            img_url = "https://cdn.shopify.com/s/files/1/0746/0850/9218/files/WhatsAppImage2026-05-25at12.39.45PM_1.jpg?v=1779737451"
-
         # Action button style depending on stock
         btn_bg = "#ffd200"
         btn_color = "#2e1b12"
@@ -1549,18 +1540,14 @@ with tab_dash:
             btn_text = "Explorar Recetas"
 
         stock_grid_html += f"""
-        <div style="background-color: #ffffff; border: 1px solid #e5e0d8; border-radius: 16px; padding: 15px; box-shadow: 0 4px 12px rgba(46, 27, 18, 0.03); font-family: 'Poppins', sans-serif; display: flex; flex-direction: column; justify-content: space-between; transition: all 0.3s ease;">
-            <!-- Image Container -->
-            <div style="background-color: {color}15; border-radius: 12px; padding: 15px; display: flex; justify-content: center; align-items: center; margin-bottom: 12px; height: 140px;">
-                <img src="{img_url}" style="max-height: 110px; max-width: 100%; object-fit: contain; border-radius: 8px;" />
-            </div>
+        <div style="background-color: #ffffff; border: 1px solid #e5e0d8; border-left: 5px solid {color}; border-radius: 16px; padding: 20px; box-shadow: 0 4px 12px rgba(46, 27, 18, 0.03); font-family: 'Poppins', sans-serif; display: flex; flex-direction: column; justify-content: space-between; transition: all 0.3s ease;">
             <!-- Product Text -->
             <div style="flex-grow: 1; display: flex; flex-direction: column; justify-content: space-between;">
                 <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 5px;">
-                    <h5 style="margin: 0; font-size: 1.05rem; color: #2e1b12; text-transform: uppercase; font-family: 'Poppins', sans-serif; font-weight: 700; line-height: 1.2;">{flavor_name}</h5>
-                    <span style="background-color: {badge_bg}; color: {badge_color}; font-size: 0.8rem; font-weight: 700; padding: 2px 8px; border-radius: 6px; white-space: nowrap;">{stock:,} pz</span>
+                    <h5 style="margin: 0; font-size: 1.1rem; color: #2e1b12; text-transform: uppercase; font-family: 'Poppins', sans-serif; font-weight: 700; line-height: 1.2;">{flavor_name}</h5>
+                    <span style="background-color: {badge_bg}; color: {badge_color}; font-size: 0.8rem; font-weight: 700; padding: 3px 8px; border-radius: 6px; white-space: nowrap;">{stock:,} pz</span>
                 </div>
-                <span style="font-size: 0.75rem; color: #6d5b52; display: block; margin-bottom: 10px;">Código: {code} | {description}</span>
+                <span style="font-size: 0.75rem; color: #6d5b52; display: block; margin-bottom: 12px;">Código: {code} | {description}</span>
             </div>
             <!-- Info & Button -->
             <div style="margin-top: auto; display: flex; flex-direction: column; gap: 8px;">
