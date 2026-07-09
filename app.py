@@ -124,7 +124,6 @@ st.markdown("""
     section[data-testid="stSidebar"] h2, 
     section[data-testid="stSidebar"] h3, 
     section[data-testid="stSidebar"] p,
-    section[data-testid="stSidebar"] span,
     section[data-testid="stSidebar"] label {
         color: #1a1a1a !important;
         font-family: 'Poppins', sans-serif !important;
