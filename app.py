@@ -86,9 +86,14 @@ st.markdown("""
     section[data-testid="stSidebar"] span:not([data-testid="stIconMaterial"]) {
         color: #2e1b12 !important;
     }
-    /* Collapse button arrow color */
+    /* Collapse button arrow color and persistent visibility */
     section[data-testid="stSidebar"] button[data-testid="stSidebarCollapseButton"] span {
         color: #2e1b12 !important;
+    }
+    div[data-testid="stSidebarCollapseButton"],
+    button[data-testid="stSidebarCollapseButton"] {
+        opacity: 1 !important;
+        visibility: visible !important;
     }
     
     /* Text elements readability */
@@ -2162,10 +2167,19 @@ with tab_stock:
                     prod_row = df_productos[df_productos['CÓDIGO'] == selected_code].iloc[0]
                     desc = prod_row['DESCRIPCIÓN']
                     is_30gr = "30 GR" in desc.upper()
-                    box_size = 120 if is_30gr else 100
-                    box_cost = 570 if is_30gr else 640
+                    default_size = 120 if is_30gr else 100
+                    default_cost = 570.0 if is_30gr else 640.0
                     
-                    st.write(f"Stock actual: **{prod_row['STOCK']} pz** (Caja de {box_size} pz)")
+                    if not is_30gr and "50 GR" not in desc.upper():
+                        default_cost = float(prod_row['PRECIO COMPRA'] * default_size)
+                    
+                    st.write(f"Stock actual: **{prod_row['STOCK']} pz** (Costo unitario actual: **${prod_row['PRECIO COMPRA']:.2f}**)")
+                    
+                    col_box1, col_box2 = st.columns(2)
+                    with col_box1:
+                        box_size = st.number_input("Piezas por caja para esta entrada:", min_value=1, step=1, value=default_size)
+                    with col_box2:
+                        box_cost = st.number_input("Costo de la caja ($) para esta entrada:", min_value=0.0, step=10.0, value=float(default_cost))
                     
                     num_boxes = st.number_input("Cantidad de cajas a ingresar:", min_value=1, step=1, value=1)
                     record_expense = st.checkbox("Registrar automáticamente el costo como gasto del negocio", value=True)
@@ -2178,7 +2192,9 @@ with tab_stock:
                     submit_stock = st.form_submit_button("Registrar Entrada")
                     
                     if submit_stock:
+                        new_unit_cost = box_cost / box_size if box_size > 0 else 0.0
                         df_productos.loc[df_productos['CÓDIGO'] == selected_code, 'STOCK'] += qty_added
+                        df_productos.loc[df_productos['CÓDIGO'] == selected_code, 'PRECIO COMPRA'] = new_unit_cost
                         save_productos(df_productos)
                         
                         today_date = datetime.today()
@@ -2212,16 +2228,23 @@ with tab_stock:
                     new_code = st.text_input("Código de Producto (Único):", placeholder="Ej. PO09").strip().upper()
                     new_name = st.text_input("Nombre de Sabor / Producto:", placeholder="Ej. CHIPOTLE").strip().upper()
                 with col2:
-                    new_desc = st.selectbox("Descripción / Tamaño:", ["BOLSA 50 GR", "BOLSA 30 GR"])
+                    new_desc = st.text_input("Descripción / Gramaje:", value="BOLSA 50 GR", placeholder="Ej. BOLSA 80 GR").strip().upper()
                     new_brand = st.text_input("Marca:", value="MAICITOS").strip().upper()
                 
-                is_30gr = "30 GR" in new_desc.upper()
-                box_size = 120 if is_30gr else 100
-                box_cost = 570 if is_30gr else 640
-                unit_cost = 4.75 if is_30gr else 6.40
+                # Configurable box sizes and costs
+                st.markdown("##### Configuración de Caja y Costo")
+                col_box1, col_box2 = st.columns(2)
+                with col_box1:
+                    default_size = 120 if "30 GR" in new_desc.upper() else 100
+                    box_size = st.number_input("Piezas por caja nueva:", min_value=1, step=1, value=default_size)
+                with col_box2:
+                    default_cost = 570.0 if "30 GR" in new_desc.upper() else 640.0
+                    box_cost = st.number_input("Costo de la caja ($):", min_value=0.0, step=10.0, value=float(default_cost))
+                
+                unit_cost = box_cost / box_size if box_size > 0 else 0.0
                 
                 st.markdown("##### Detalles de Stock Inicial")
-                num_boxes = st.number_input(f"Cantidad de cajas a ingresar (Caja de {box_size} pz):", min_value=0, step=1, value=1)
+                num_boxes = st.number_input(f"Cantidad de cajas a ingresar:", min_value=0, step=1, value=1)
                 record_expense = st.checkbox("Registrar automáticamente el costo como gasto del negocio", value=True)
                 
                 qty_added = num_boxes * box_size
