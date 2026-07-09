@@ -18,11 +18,37 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700;800&display=swap');
     
     /* Global Background and Fonts */
-    html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"], [data-testid="stHeader"], .stApp {
+    html, body, .stApp {
         font-family: 'Poppins', sans-serif !important;
         background: linear-gradient(135deg, #e0f2f1 0%, #fff8e1 50%, #f3e5f5 100%) !important;
         background-attachment: fixed !important;
         color: #1a1a1a !important;
+    }
+    
+    /* Make layout containers transparent to reveal background */
+    [data-testid="stAppViewContainer"], 
+    [data-testid="stMain"], 
+    [data-testid="stHeader"], 
+    [data-testid="stMainBlockContainer"], 
+    .block-container, 
+    [data-testid="stVerticalBlock"], 
+    [data-testid="stVerticalBlockBorderWrapper"],
+    div[role="tabpanel"],
+    div[data-baseweb="tab-panel"] {
+        background: transparent !important;
+        background-color: transparent !important;
+    }
+    
+    /* Glassmorphic Columns as card panels */
+    div[data-testid="column"] {
+        background-color: rgba(255, 255, 255, 0.35) !important;
+        backdrop-filter: blur(12px) !important;
+        -webkit-backdrop-filter: blur(12px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.45) !important;
+        border-radius: 16px !important;
+        padding: 20px !important;
+        box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.04) !important;
+        margin-bottom: 15px !important;
     }
     
     /* Sidebar styling as floating glass */
