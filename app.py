@@ -174,6 +174,29 @@ st.markdown("""
         display: inline-block !important;
         border: 1px solid rgba(197, 34, 31, 0.2) !important;
     }
+    
+    /* Glassmorphic Tabs */
+    button[data-baseweb="tab-list"] {
+        background-color: rgba(255, 255, 255, 0.3) !important;
+        backdrop-filter: blur(10px) !important;
+        -webkit-backdrop-filter: blur(10px) !important;
+        border-radius: 12px !important;
+        padding: 5px !important;
+        border: 1px solid rgba(255, 255, 255, 0.4) !important;
+    }
+    button[data-baseweb="tab"] {
+        font-family: 'Poppins', sans-serif !important;
+        color: #1a1a1a !important;
+        font-weight: 600 !important;
+        border-radius: 8px !important;
+        padding: 8px 16px !important;
+        transition: all 0.3s !important;
+    }
+    button[data-baseweb="tab"][aria-selected="true"] {
+        background-color: rgba(255, 255, 255, 0.65) !important;
+        color: #e65100 !important;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05) !important;
+    }
 </style>
 
 """, unsafe_allow_html=True)
