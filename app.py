@@ -18,17 +18,23 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700;800&display=swap');
     
     /* Global Background and Fonts with Floating Liquid Blobs */
-    html, body, .stApp {
+    html, body {
         font-family: 'Poppins', sans-serif !important;
         background: linear-gradient(135deg, #e0f2f1 0%, #fff8e1 50%, #f3e5f5 100%) !important;
         background-attachment: fixed !important;
         color: #1a1a1a !important;
-        position: relative;
         overflow-x: hidden;
     }
     
-    /* Background fluid liquid blobs */
-    .stApp::before {
+    .stApp {
+        font-family: 'Poppins', sans-serif !important;
+        color: #1a1a1a !important;
+        background: transparent !important;
+        background-color: transparent !important;
+    }
+    
+    /* Background fluid liquid blobs on body */
+    body::before {
         content: "";
         position: fixed;
         top: 15%;
@@ -38,12 +44,12 @@ st.markdown("""
         background: radial-gradient(circle, rgba(0, 180, 201, 0.45) 0%, rgba(0, 180, 201, 0) 70%) !important;
         border-radius: 50% !important;
         filter: blur(90px) !important;
-        z-index: -100 !important;
+        z-index: -1000 !important;
         pointer-events: none;
         animation: floatBlob1 25s infinite alternate ease-in-out !important;
     }
     
-    .stApp::after {
+    body::after {
         content: "";
         position: fixed;
         bottom: 10%;
@@ -53,7 +59,7 @@ st.markdown("""
         background: radial-gradient(circle, rgba(255, 116, 21, 0.4) 0%, rgba(255, 116, 21, 0) 70%) !important;
         border-radius: 50% !important;
         filter: blur(100px) !important;
-        z-index: -100 !important;
+        z-index: -1000 !important;
         pointer-events: none;
         animation: floatBlob2 30s infinite alternate ease-in-out !important;
     }
