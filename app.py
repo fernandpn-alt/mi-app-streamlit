@@ -20,14 +20,17 @@ st.markdown("""
     /* Global Background and Fonts */
     .stApp {
         font-family: 'Poppins', sans-serif !important;
-        background-color: #ffffff !important;
+        background: linear-gradient(135deg, #e0f2f1 0%, #fff8e1 50%, #f3e5f5 100%) !important;
+        background-attachment: fixed !important;
         color: #1a1a1a !important;
     }
     
-    /* Sidebar styling */
+    /* Sidebar styling as floating glass */
     section[data-testid="stSidebar"] {
-        background-color: #f0fdff !important;
-        border-right: 2px solid #00b4c9;
+        background-color: rgba(255, 255, 255, 0.4) !important;
+        backdrop-filter: blur(16px) !important;
+        -webkit-backdrop-filter: blur(16px) !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.5) !important;
     }
     section[data-testid="stSidebar"] h1, 
     section[data-testid="stSidebar"] h2, 
@@ -35,7 +38,7 @@ st.markdown("""
     section[data-testid="stSidebar"] p,
     section[data-testid="stSidebar"] span,
     section[data-testid="stSidebar"] label {
-        color: #000000 !important;
+        color: #1a1a1a !important;
         font-family: 'Poppins', sans-serif !important;
     }
     
@@ -47,12 +50,14 @@ st.markdown("""
     /* Headings */
     h1, h2, h3, h4, h5, h6 {
         font-family: 'Poppins', sans-serif !important;
-        color: #ff7415 !important;
+        color: #e65100 !important;
         font-weight: 700 !important;
     }
     
     .main-title {
-        color: #ff7415;
+        background: linear-gradient(90deg, #ff7415, #ff3d00);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
         font-weight: 800;
         font-size: 2.6rem;
         margin-bottom: 0.1rem;
@@ -60,18 +65,20 @@ st.markdown("""
         letter-spacing: 1px;
     }
     .main-subtitle {
-        color: #666666;
+        color: #555555;
         font-size: 1.1rem;
         margin-bottom: 2rem;
     }
     
-    /* Metrics card */
+    /* Glassmorphic Metrics card */
     div[data-testid="metric-container"] {
-        background-color: #f8f9fa;
-        border: 2px solid #ff7415;
+        background-color: rgba(255, 255, 255, 0.45) !important;
+        backdrop-filter: blur(12px) !important;
+        -webkit-backdrop-filter: blur(12px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.6) !important;
         padding: 15px;
-        border-radius: 12px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        border-radius: 16px !important;
+        box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.04) !important;
     }
     div[data-testid="stMetricValue"] {
         color: #000000 !important;
@@ -79,48 +86,59 @@ st.markdown("""
         font-weight: 700 !important;
     }
     div[data-testid="stMetricLabel"] {
-        color: #666666 !important;
+        color: #555555 !important;
     }
     
-    /* Form containers */
+    /* Glassmorphic Form containers */
     div[data-testid="stForm"] {
-        background-color: #ffffff;
-        border: 2px solid #00b4c9;
+        background-color: rgba(255, 255, 255, 0.35) !important;
+        backdrop-filter: blur(16px) !important;
+        -webkit-backdrop-filter: blur(16px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.5) !important;
         padding: 25px;
-        border-radius: 15px;
-        box-shadow: 0 10px 15px -3px rgba(0, 180, 201, 0.05);
+        border-radius: 20px !important;
+        box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.05) !important;
     }
     
-    /* Buttons */
+    /* Premium Buttons with flow gradient and glass reflections */
     div.stButton > button {
-        background-color: #ff7415 !important;
+        background: linear-gradient(90deg, #ff7415, #ff9e59) !important;
         color: #ffffff !important;
-        border: none !important;
-        border-radius: 6px !important;
+        border: 1px solid rgba(255, 255, 255, 0.4) !important;
+        border-radius: 10px !important;
         font-weight: 600 !important;
         padding: 10px 24px !important;
-        transition: all 0.3s !important;
+        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
         text-transform: uppercase !important;
+        box-shadow: 0 4px 15px rgba(255, 116, 21, 0.2) !important;
     }
     div.stButton > button:hover {
-        background-color: #000000 !important;
+        background: linear-gradient(90deg, #e65100, #ff7415) !important;
         color: #ffffff !important;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+        transform: translateY(-2px) !important;
+        box-shadow: 0 6px 20px rgba(255, 116, 21, 0.35) !important;
+    }
+    div.stButton > button:active {
+        transform: translateY(0px) !important;
     }
     
     /* Primary buttons (Delete, Reset, Warning) */
     div.stButton > button[kind="primary"] {
-        background-color: #da3f3f !important;
-        color: #ffffff !important;
+        background: linear-gradient(90deg, #da3f3f, #f07070) !important;
+        box-shadow: 0 4px 15px rgba(218, 63, 63, 0.2) !important;
     }
     div.stButton > button[kind="primary"]:hover {
-        background-color: #000000 !important;
+        background: linear-gradient(90deg, #b32424, #da3f3f) !important;
+        box-shadow: 0 6px 20px rgba(218, 63, 63, 0.35) !important;
     }
 
-    /* Input inputs text visibility */
+    /* Input fields styling */
     .stApp input, .stApp select, .stApp textarea, .stApp div[role="textbox"], .stApp div[data-baseweb="select"] {
         color: #000000 !important;
-        background-color: #f8f9fa !important;
+        background-color: rgba(255, 255, 255, 0.5) !important;
+        backdrop-filter: blur(4px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.4) !important;
+        border-radius: 8px !important;
     }
     
     /* Option lists inside selectors */
@@ -130,28 +148,31 @@ st.markdown("""
     
     /* Badges */
     .badge-green {
-        background-color: #e6f4ea !important;
+        background-color: rgba(230, 244, 234, 0.8) !important;
         color: #137333 !important;
         padding: 4px 10px !important;
         border-radius: 6px !important;
         font-weight: bold !important;
         display: inline-block !important;
+        border: 1px solid rgba(19, 115, 51, 0.2) !important;
     }
     .badge-orange {
-        background-color: #fef3c7 !important;
+        background-color: rgba(254, 243, 199, 0.8) !important;
         color: #b45309 !important;
         padding: 4px 10px !important;
         border-radius: 6px !important;
         font-weight: bold !important;
         display: inline-block !important;
+        border: 1px solid rgba(180, 83, 9, 0.2) !important;
     }
     .badge-red {
-        background-color: #fce8e6 !important;
+        background-color: rgba(252, 232, 230, 0.8) !important;
         color: #c5221f !important;
         padding: 4px 10px !important;
         border-radius: 6px !important;
         font-weight: bold !important;
         display: inline-block !important;
+        border: 1px solid rgba(197, 34, 31, 0.2) !important;
     }
 </style>
 
@@ -1247,9 +1268,16 @@ df_gastos['MONTO'] = pd.to_numeric(df_gastos['MONTO'], errors='coerce').fillna(0
 # Sidebar Info
 with st.sidebar:
     st.header("⚙️ Configuración General")
-    # Hide input if API key is already loaded in secrets
-    if "gemini_api_key" in st.secrets and st.secrets["gemini_api_key"].strip():
-        api_key = st.secrets["gemini_api_key"].strip()
+    has_secrets_api_key = False
+    api_key = ""
+    try:
+        if "gemini_api_key" in st.secrets and st.secrets["gemini_api_key"].strip():
+            api_key = st.secrets["gemini_api_key"].strip()
+            has_secrets_api_key = True
+    except Exception:
+        pass
+
+    if has_secrets_api_key:
         st.success("🤖 Asistente de IA Activo")
     else:
         api_key = st.text_input("Gemini API Key:", type="password")
@@ -1334,22 +1362,22 @@ with tab_dash:
     # HTML for KPI Cards (Responsive CSS Grid, doesn't truncate numbers)
     kpi_html = f"""
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 25px;">
-        <div style="background: linear-gradient(135deg, #ffffff 0%, #f0fdff 100%); border: 2px solid #00b4c9; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.02); text-align: center; font-family: 'Poppins', sans-serif;">
+        <div style="background: rgba(255, 255, 255, 0.45); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(0, 180, 201, 0.25); border-top: 4px solid #00b4c9; border-radius: 16px; padding: 20px; box-shadow: 0 8px 32px rgba(31, 38, 135, 0.04); text-align: center; font-family: 'Poppins', sans-serif;">
             <span style="font-size: 0.8rem; color: #555; font-weight: 600; text-transform: uppercase;">Ventas de Hoy</span>
             <div style="font-size: 1.8rem; font-weight: 800; color: #00b4c9; margin-top: 5px;">${today_revenue:,.2f}</div>
             <span style="font-size: 0.75rem; color: #777;">{today_sales_count} ventas registradas</span>
         </div>
-        <div style="background: linear-gradient(135deg, #ffffff 0%, #fffcf9 100%); border: 2px solid #ff7415; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.02); text-align: center; font-family: 'Poppins', sans-serif;">
+        <div style="background: rgba(255, 255, 255, 0.45); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 116, 21, 0.25); border-top: 4px solid #ff7415; border-radius: 16px; padding: 20px; box-shadow: 0 8px 32px rgba(31, 38, 135, 0.04); text-align: center; font-family: 'Poppins', sans-serif;">
             <span style="font-size: 0.8rem; color: #555; font-weight: 600; text-transform: uppercase;">Por Cobrar (Clientes)</span>
             <div style="font-size: 1.8rem; font-weight: 800; color: #ff7415; margin-top: 5px;">${total_debt:,.2f}</div>
             <span style="font-size: 0.75rem; color: #777;">Saldo pendiente de pago</span>
         </div>
-        <div style="background: linear-gradient(135deg, #ffffff 0%, #f9f9f9 100%); border: 2px solid #666; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.02); text-align: center; font-family: 'Poppins', sans-serif;">
+        <div style="background: rgba(255, 255, 255, 0.45); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(102, 102, 102, 0.25); border-top: 4px solid #666666; border-radius: 16px; padding: 20px; box-shadow: 0 8px 32px rgba(31, 38, 135, 0.04); text-align: center; font-family: 'Poppins', sans-serif;">
             <span style="font-size: 0.8rem; color: #555; font-weight: 600; text-transform: uppercase;">Valor en Almacén</span>
             <div style="font-size: 1.8rem; font-weight: 800; color: #333; margin-top: 5px;">${val_compra:,.2f}</div>
             <span style="font-size: 0.75rem; color: #777;">Inventario total a precio costo</span>
         </div>
-        <div style="background: linear-gradient(135deg, #ffffff 0%, #f6fff6 100%); border: 2px solid #10b981; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.02); text-align: center; font-family: 'Poppins', sans-serif;">
+        <div style="background: rgba(255, 255, 255, 0.45); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(16, 185, 129, 0.25); border-top: 4px solid #10b981; border-radius: 16px; padding: 20px; box-shadow: 0 8px 32px rgba(31, 38, 135, 0.04); text-align: center; font-family: 'Poppins', sans-serif;">
             <span style="font-size: 0.8rem; color: #555; font-weight: 600; text-transform: uppercase;">Stock en Almacén</span>
             <div style="font-size: 1.8rem; font-weight: 800; color: #10b981; margin-top: 5px;">{total_piezas:,} pz</div>
             <span style="font-size: 0.75rem; color: #777;">{total_productos} sabores | {insuficiente} bajo stock</span>
@@ -1371,7 +1399,7 @@ with tab_dash:
         else:
             for rank, (flavor, qty) in enumerate(top_selling, 1):
                 st.markdown(f"""
-                <div style="background-color: #f8f9fa; padding: 10px 15px; border-radius: 8px; margin-bottom: 8px; border-left: 4px solid #ff7415; font-family: 'Poppins', sans-serif;">
+                <div style="background-color: rgba(255, 255, 255, 0.45); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); padding: 10px 15px; border-radius: 12px; margin-bottom: 8px; border-left: 4px solid #ff7415; border-top: 1px solid rgba(255,255,255,0.4); border-right: 1px solid rgba(255,255,255,0.4); border-bottom: 1px solid rgba(255,255,255,0.4); font-family: 'Poppins', sans-serif; box-shadow: 0 4px 15px rgba(0,0,0,0.01);">
                     <div style="display: flex; justify-content: space-between; font-weight: 600; font-size: 0.9rem; color: #1a1a1a;">
                         <span>#{rank} {flavor}</span>
                         <span style="color: #ff7415;">{qty:,} piezas</span>
@@ -1384,7 +1412,7 @@ with tab_dash:
         total_clientes = len(df_clientes)
         debtors_count = len(debtor_clients)
         st.markdown(f"""
-        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #00b4c9; font-family: 'Poppins', sans-serif; height: 100%;">
+        <div style="background-color: rgba(255, 255, 255, 0.45); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); padding: 15px; border-radius: 12px; border-left: 4px solid #00b4c9; border-top: 1px solid rgba(255,255,255,0.4); border-right: 1px solid rgba(255,255,255,0.4); border-bottom: 1px solid rgba(255,255,255,0.4); font-family: 'Poppins', sans-serif; box-shadow: 0 4px 15px rgba(0,0,0,0.01); height: 100%;">
             <p style="margin: 0 0 8px 0; font-size: 0.9rem; color: #1a1a1a;">Clientes registrados: <b>{total_clientes}</b></p>
             <p style="margin: 0 0 8px 0; font-size: 0.9rem; color: #1a1a1a;">Clientes con adeudo: <b style="color: #ef4444;">{debtors_count}</b></p>
             <p style="margin: 0; font-size: 0.9rem; color: #1a1a1a;">Cliente con mayor deuda: <b>{top_debtor}</b> (${top_debt_val:,.2f})</p>
@@ -1424,15 +1452,15 @@ with tab_dash:
             status_text = "Bajo Stock"
             
         stock_grid_html += f"""
-        <div style="background-color: #ffffff; border-left: 5px solid {color}; border-top: 1px solid #eee; border-right: 1px solid #eee; border-bottom: 1px solid #eee; border-radius: 8px; padding: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); font-family: 'Poppins', sans-serif;">
+        <div style="background-color: rgba(255, 255, 255, 0.45); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-left: 5px solid {color}; border-top: 1px solid rgba(255, 255, 255, 0.4); border-right: 1px solid rgba(255, 255, 255, 0.4); border-bottom: 1px solid rgba(255, 255, 255, 0.4); border-radius: 12px; padding: 15px; box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.03); font-family: 'Poppins', sans-serif;">
             <div style="display: flex; justify-content: space-between; align-items: start;">
                 <div>
-                    <h5 style="margin: 0; font-size: 1.1rem; color: #ff7415; text-transform: uppercase; font-family: 'Poppins', sans-serif;">{flavor_name}</h5>
-                    <span style="font-size: 0.75rem; color: #777;">Código: {code} | {description}</span>
+                    <h5 style="margin: 0; font-size: 1.1rem; color: #e65100; text-transform: uppercase; font-family: 'Poppins', sans-serif;">{flavor_name}</h5>
+                    <span style="font-size: 0.75rem; color: #555;">Código: {code} | {description}</span>
                 </div>
-                <span style="background-color: {badge_bg}; color: {badge_color}; font-size: 0.85rem; font-weight: 700; padding: 3px 8px; border-radius: 4px;">{stock:,} pz</span>
+                <span style="background-color: {badge_bg}; color: {badge_color}; font-size: 0.85rem; font-weight: 700; padding: 3px 8px; border-radius: 6px; border: 1px solid rgba({badge_color}, 0.1);">{stock:,} pz</span>
             </div>
-            <div style="margin-top: 12px; display: flex; justify-content: space-between; font-size: 0.85rem; color: #555;">
+            <div style="margin-top: 12px; display: flex; justify-content: space-between; font-size: 0.85rem; color: #444;">
                 <span>Valor en almacén: <b>${stock_value:,.2f}</b></span>
                 <span>Estado: <b style="color: {badge_color};">{status_text}</b></span>
             </div>
