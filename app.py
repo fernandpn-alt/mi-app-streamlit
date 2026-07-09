@@ -17,12 +17,57 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700;800&display=swap');
     
-    /* Global Background and Fonts */
+    /* Global Background and Fonts with Floating Liquid Blobs */
     html, body, .stApp {
         font-family: 'Poppins', sans-serif !important;
         background: linear-gradient(135deg, #e0f2f1 0%, #fff8e1 50%, #f3e5f5 100%) !important;
         background-attachment: fixed !important;
         color: #1a1a1a !important;
+        position: relative;
+        overflow-x: hidden;
+    }
+    
+    /* Background fluid liquid blobs */
+    .stApp::before {
+        content: "";
+        position: fixed;
+        top: 15%;
+        left: 5%;
+        width: 450px;
+        height: 450px;
+        background: radial-gradient(circle, rgba(0, 180, 201, 0.45) 0%, rgba(0, 180, 201, 0) 70%) !important;
+        border-radius: 50% !important;
+        filter: blur(90px) !important;
+        z-index: -100 !important;
+        pointer-events: none;
+        animation: floatBlob1 25s infinite alternate ease-in-out !important;
+    }
+    
+    .stApp::after {
+        content: "";
+        position: fixed;
+        bottom: 10%;
+        right: 10%;
+        width: 500px;
+        height: 500px;
+        background: radial-gradient(circle, rgba(255, 116, 21, 0.4) 0%, rgba(255, 116, 21, 0) 70%) !important;
+        border-radius: 50% !important;
+        filter: blur(100px) !important;
+        z-index: -100 !important;
+        pointer-events: none;
+        animation: floatBlob2 30s infinite alternate ease-in-out !important;
+    }
+    
+    @keyframes floatBlob1 {
+        0% { transform: translate(0, 0) scale(1); }
+        50% { transform: translate(80px, 40px) scale(1.1); }
+        100% { transform: translate(160px, -20px) scale(1); }
+    }
+    
+    @keyframes floatBlob2 {
+        0% { transform: translate(0, 0) scale(1); }
+        50% { transform: translate(-100px, -50px) scale(1.15); }
+        100% { transform: translate(-50px, 30px) scale(1); }
     }
     
     /* Make layout containers transparent to reveal background */
@@ -39,24 +84,35 @@ st.markdown("""
         background-color: transparent !important;
     }
     
-    /* Glassmorphic Columns as card panels */
+    /* Glassmorphic Columns as card panels with extreme depth and reflections */
     div[data-testid="column"] {
-        background-color: rgba(255, 255, 255, 0.35) !important;
-        backdrop-filter: blur(12px) !important;
-        -webkit-backdrop-filter: blur(12px) !important;
-        border: 1px solid rgba(255, 255, 255, 0.45) !important;
-        border-radius: 16px !important;
-        padding: 20px !important;
-        box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.04) !important;
-        margin-bottom: 15px !important;
+        background: rgba(255, 255, 255, 0.32) !important;
+        backdrop-filter: blur(20px) !important;
+        -webkit-backdrop-filter: blur(20px) !important;
+        border-top: 1.5px solid rgba(255, 255, 255, 0.75) !important;
+        border-left: 1.5px solid rgba(255, 255, 255, 0.75) !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.25) !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.25) !important;
+        border-radius: 24px !important;
+        padding: 24px !important;
+        box-shadow: 0 10px 30px 0 rgba(31, 38, 135, 0.04), 
+                    inset 0 4px 10px -2px rgba(255, 255, 255, 0.8) !important;
+        margin-bottom: 20px !important;
+        transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1) !important;
+    }
+    div[data-testid="column"]:hover {
+        transform: translateY(-4px) !important;
+        background: rgba(255, 255, 255, 0.4) !important;
+        box-shadow: 0 16px 40px 0 rgba(31, 38, 135, 0.08), 
+                    inset 0 4px 12px -1px rgba(255, 255, 255, 0.95) !important;
     }
     
-    /* Sidebar styling as floating glass */
+    /* Sidebar styling as floating glass sheet */
     section[data-testid="stSidebar"] {
-        background-color: rgba(255, 255, 255, 0.4) !important;
-        backdrop-filter: blur(16px) !important;
-        -webkit-backdrop-filter: blur(16px) !important;
-        border-right: 1px solid rgba(255, 255, 255, 0.5) !important;
+        background-color: rgba(255, 255, 255, 0.25) !important;
+        backdrop-filter: blur(24px) !important;
+        -webkit-backdrop-filter: blur(24px) !important;
+        border-right: 1.5px solid rgba(255, 255, 255, 0.4) !important;
     }
     section[data-testid="stSidebar"] h1, 
     section[data-testid="stSidebar"] h2, 
@@ -96,75 +152,109 @@ st.markdown("""
         margin-bottom: 2rem;
     }
     
-    /* Glassmorphic Metrics card */
+    /* Glassmorphic Metrics card with organic corners and shadow highlights */
     div[data-testid="metric-container"] {
-        background-color: rgba(255, 255, 255, 0.45) !important;
-        backdrop-filter: blur(12px) !important;
-        -webkit-backdrop-filter: blur(12px) !important;
-        border: 1px solid rgba(255, 255, 255, 0.6) !important;
-        padding: 15px;
-        border-radius: 16px !important;
-        box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.04) !important;
+        background: rgba(255, 255, 255, 0.38) !important;
+        backdrop-filter: blur(20px) !important;
+        -webkit-backdrop-filter: blur(20px) !important;
+        border-top: 1.5px solid rgba(255, 255, 255, 0.8) !important;
+        border-left: 1.5px solid rgba(255, 255, 255, 0.8) !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.25) !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.25) !important;
+        padding: 20px;
+        border-radius: 20px !important;
+        box-shadow: 0 10px 30px 0 rgba(31, 38, 135, 0.04), 
+                    inset 0 4px 8px -2px rgba(255, 255, 255, 0.85) !important;
+        transition: all 0.3s ease !important;
+    }
+    div[data-testid="metric-container"]:hover {
+        transform: translateY(-3px) !important;
+        background: rgba(255, 255, 255, 0.45) !important;
+        box-shadow: 0 14px 35px 0 rgba(31, 38, 135, 0.07), 
+                    inset 0 4px 10px -1px rgba(255, 255, 255, 0.95) !important;
     }
     div[data-testid="stMetricValue"] {
         color: #000000 !important;
         font-size: 2rem !important;
-        font-weight: 700 !important;
+        font-weight: 800 !important;
     }
     div[data-testid="stMetricLabel"] {
-        color: #555555 !important;
+        color: #444444 !important;
+        font-weight: 600 !important;
     }
     
     /* Glassmorphic Form containers */
     div[data-testid="stForm"] {
-        background-color: rgba(255, 255, 255, 0.35) !important;
-        backdrop-filter: blur(16px) !important;
-        -webkit-backdrop-filter: blur(16px) !important;
-        border: 1px solid rgba(255, 255, 255, 0.5) !important;
-        padding: 25px;
-        border-radius: 20px !important;
-        box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.05) !important;
+        background: rgba(255, 255, 255, 0.3) !important;
+        backdrop-filter: blur(20px) !important;
+        -webkit-backdrop-filter: blur(20px) !important;
+        border-top: 1.5px solid rgba(255, 255, 255, 0.75) !important;
+        border-left: 1.5px solid rgba(255, 255, 255, 0.75) !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.2) !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.2) !important;
+        padding: 30px;
+        border-radius: 28px !important;
+        box-shadow: 0 15px 35px 0 rgba(31, 38, 135, 0.05), 
+                    inset 0 4px 12px -2px rgba(255, 255, 255, 0.8) !important;
     }
     
-    /* Premium Buttons with flow gradient and glass reflections */
+    /* Premium Buttons as Gel/Glass Capsules with transitions */
     div.stButton > button {
-        background: linear-gradient(90deg, #ff7415, #ff9e59) !important;
-        color: #ffffff !important;
-        border: 1px solid rgba(255, 255, 255, 0.4) !important;
-        border-radius: 10px !important;
-        font-weight: 600 !important;
-        padding: 10px 24px !important;
-        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+        background: rgba(255, 255, 255, 0.45) !important;
+        color: #e65100 !important;
+        backdrop-filter: blur(10px) !important;
+        -webkit-backdrop-filter: blur(10px) !important;
+        border-top: 1.5px solid rgba(255, 255, 255, 0.85) !important;
+        border-left: 1.5px solid rgba(255, 255, 255, 0.85) !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.25) !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.25) !important;
+        border-radius: 50px !important;
+        font-weight: 700 !important;
+        padding: 10px 28px !important;
+        transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
         text-transform: uppercase !important;
-        box-shadow: 0 4px 15px rgba(255, 116, 21, 0.2) !important;
+        box-shadow: 0 4px 15px rgba(31, 38, 135, 0.04), inset 0 0 8px rgba(255,255,255,0.5) !important;
+        letter-spacing: 0.5px !important;
     }
     div.stButton > button:hover {
-        background: linear-gradient(90deg, #e65100, #ff7415) !important;
+        background: linear-gradient(135deg, rgba(255, 116, 21, 0.8) 0%, rgba(255, 158, 89, 0.8) 100%) !important;
         color: #ffffff !important;
-        transform: translateY(-2px) !important;
-        box-shadow: 0 6px 20px rgba(255, 116, 21, 0.35) !important;
+        transform: scale(1.05) translateY(-2px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.4) !important;
+        box-shadow: 0 10px 25px rgba(255, 116, 21, 0.35) !important;
     }
     div.stButton > button:active {
-        transform: translateY(0px) !important;
+        transform: scale(0.98) translateY(0px) !important;
     }
     
     /* Primary buttons (Delete, Reset, Warning) */
     div.stButton > button[kind="primary"] {
-        background: linear-gradient(90deg, #da3f3f, #f07070) !important;
-        box-shadow: 0 4px 15px rgba(218, 63, 63, 0.2) !important;
+        color: #da3f3f !important;
+        box-shadow: 0 4px 15px rgba(218, 63, 63, 0.05), inset 0 0 8px rgba(255,255,255,0.5) !important;
     }
     div.stButton > button[kind="primary"]:hover {
-        background: linear-gradient(90deg, #b32424, #da3f3f) !important;
-        box-shadow: 0 6px 20px rgba(218, 63, 63, 0.35) !important;
+        background: linear-gradient(135deg, rgba(218, 63, 63, 0.8) 0%, rgba(240, 112, 112, 0.8) 100%) !important;
+        color: #ffffff !important;
+        box-shadow: 0 10px 25px rgba(218, 63, 63, 0.35) !important;
     }
 
-    /* Input fields styling */
+    /* Input fields styling with soft glass borders */
     .stApp input, .stApp select, .stApp textarea, .stApp div[role="textbox"], .stApp div[data-baseweb="select"] {
         color: #000000 !important;
-        background-color: rgba(255, 255, 255, 0.5) !important;
-        backdrop-filter: blur(4px) !important;
-        border: 1px solid rgba(255, 255, 255, 0.4) !important;
-        border-radius: 8px !important;
+        background-color: rgba(255, 255, 255, 0.45) !important;
+        backdrop-filter: blur(8px) !important;
+        border-top: 1px solid rgba(255, 255, 255, 0.6) !important;
+        border-left: 1px solid rgba(255, 255, 255, 0.6) !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.2) !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.2) !important;
+        border-radius: 12px !important;
+        box-shadow: inset 0 2px 4px rgba(0,0,0,0.02) !important;
+        transition: all 0.3s ease !important;
+    }
+    .stApp input:focus, .stApp select:focus, .stApp textarea:focus {
+        border-color: rgba(255, 116, 21, 0.5) !important;
+        box-shadow: 0 0 0 2px rgba(255, 116, 21, 0.15) !important;
+        background-color: rgba(255, 255, 255, 0.6) !important;
     }
     
     /* Option lists inside selectors */
@@ -172,56 +262,57 @@ st.markdown("""
         color: #000000 !important;
     }
     
-    /* Badges */
+    /* Badges with light glass transparency */
     .badge-green {
-        background-color: rgba(230, 244, 234, 0.8) !important;
+        background-color: rgba(230, 244, 234, 0.7) !important;
         color: #137333 !important;
-        padding: 4px 10px !important;
-        border-radius: 6px !important;
+        padding: 4px 12px !important;
+        border-radius: 8px !important;
         font-weight: bold !important;
         display: inline-block !important;
-        border: 1px solid rgba(19, 115, 51, 0.2) !important;
+        border: 1px solid rgba(19, 115, 51, 0.15) !important;
     }
     .badge-orange {
-        background-color: rgba(254, 243, 199, 0.8) !important;
+        background-color: rgba(254, 243, 199, 0.7) !important;
         color: #b45309 !important;
-        padding: 4px 10px !important;
-        border-radius: 6px !important;
+        padding: 4px 12px !important;
+        border-radius: 8px !important;
         font-weight: bold !important;
         display: inline-block !important;
-        border: 1px solid rgba(180, 83, 9, 0.2) !important;
+        border: 1px solid rgba(180, 83, 9, 0.15) !important;
     }
     .badge-red {
-        background-color: rgba(252, 232, 230, 0.8) !important;
+        background-color: rgba(252, 232, 230, 0.7) !important;
         color: #c5221f !important;
-        padding: 4px 10px !important;
-        border-radius: 6px !important;
+        padding: 4px 12px !important;
+        border-radius: 8px !important;
         font-weight: bold !important;
         display: inline-block !important;
-        border: 1px solid rgba(197, 34, 31, 0.2) !important;
+        border: 1px solid rgba(197, 34, 31, 0.15) !important;
     }
     
-    /* Glassmorphic Tabs */
+    /* Glassmorphic Tabs as a horizontal capsule */
     button[data-baseweb="tab-list"] {
-        background-color: rgba(255, 255, 255, 0.3) !important;
-        backdrop-filter: blur(10px) !important;
-        -webkit-backdrop-filter: blur(10px) !important;
-        border-radius: 12px !important;
-        padding: 5px !important;
-        border: 1px solid rgba(255, 255, 255, 0.4) !important;
+        background-color: rgba(255, 255, 255, 0.25) !important;
+        backdrop-filter: blur(12px) !important;
+        -webkit-backdrop-filter: blur(12px) !important;
+        border-radius: 16px !important;
+        padding: 6px !important;
+        border: 1.5px solid rgba(255, 255, 255, 0.4) !important;
+        box-shadow: 0 8px 30px rgba(31, 38, 135, 0.02) !important;
     }
     button[data-baseweb="tab"] {
         font-family: 'Poppins', sans-serif !important;
-        color: #1a1a1a !important;
+        color: #333333 !important;
         font-weight: 600 !important;
-        border-radius: 8px !important;
-        padding: 8px 16px !important;
-        transition: all 0.3s !important;
+        border-radius: 10px !important;
+        padding: 10px 20px !important;
+        transition: all 0.3s ease !important;
     }
     button[data-baseweb="tab"][aria-selected="true"] {
         background-color: rgba(255, 255, 255, 0.65) !important;
         color: #e65100 !important;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05) !important;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04) !important;
     }
 </style>
 
