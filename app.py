@@ -18,7 +18,7 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700;800&display=swap');
     
     /* Global Background and Fonts */
-    .stApp {
+    html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"], [data-testid="stHeader"], .stApp {
         font-family: 'Poppins', sans-serif !important;
         background: linear-gradient(135deg, #e0f2f1 0%, #fff8e1 50%, #f3e5f5 100%) !important;
         background-attachment: fixed !important;
