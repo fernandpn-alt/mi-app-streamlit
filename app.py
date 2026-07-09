@@ -1368,6 +1368,12 @@ with st.sidebar:
     
     if use_gsheets:
         st.success("🟢 Conectado a Google Sheets")
+        try:
+            ws_salidas = sh.worksheet("SALIDAS")
+            cols_salidas = ws_salidas.get_all_values()[1] # row 1 (headers)
+            st.write("Columnas SALIDAS:", cols_salidas)
+        except Exception as debug_err:
+            st.write("Error cols debug:", debug_err)
         if st.button("🔄 Sincronizar con Drive (Recargar)", use_container_width=True):
             st.cache_data.clear()
             st.rerun()
