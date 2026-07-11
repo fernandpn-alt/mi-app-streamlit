@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 import json
 import os
@@ -2031,82 +2030,17 @@ Falta por pagar: ${pendiente:.2f}
                 label="📥 Descargar Recibo (.txt)",
                 data=st.session_state.generated_text,
                 file_name=f"recibo_{st.session_state.generated_folio}.txt",
-                mime="text/plain"
+                mime="text/plain",
+                use_container_width=True
             )
         with col_actions2:
-            import json
-            escaped_text = json.dumps(st.session_state.generated_text)
-            
-            share_html = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <style>
-                    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght=600;700&display=swap');
-                    body {{
-                        margin: 0;
-                        padding: 0;
-                        background: transparent;
-                        display: flex;
-                        align-items: center;
-                    }}
-                    #share-btn {{
-                        background-color: #ffd200 !important;
-                        color: #2e1b12 !important;
-                        border: none !important;
-                        border-radius: 50px !important;
-                        font-family: 'Poppins', sans-serif !important;
-                        font-weight: 700 !important;
-                        padding: 10px 28px !important;
-                        cursor: pointer !important;
-                        text-transform: uppercase !important;
-                        font-size: 14px !important;
-                        box-shadow: 0 4px 12px rgba(255, 210, 0, 0.2) !important;
-                        letter-spacing: 0.5px !important;
-                        display: inline-flex !important;
-                        align-items: center !important;
-                        gap: 8px !important;
-                        transition: all 0.3s ease !important;
-                        height: 42px !important;
-                        box-sizing: border-box !important;
-                    }}
-                    #share-btn:hover {{
-                        background-color: #f4c400 !important;
-                        transform: scale(1.03) !important;
-                        box-shadow: 0 6px 15px rgba(255, 210, 0, 0.3) !important;
-                    }}
-                </style>
-            </head>
-            <body>
-                <button id="share-btn">📲 Compartir Directo</button>
-                <script>
-                    const textData = {escaped_text};
-                    const btn = document.getElementById('share-btn');
-                    
-                    btn.onclick = async () => {{
-                        if (navigator.share) {{
-                            try {{
-                                await navigator.share({{
-                                    title: 'Ticket de Compra',
-                                    text: textData
-                                }});
-                            }} catch (err) {{
-                                console.error('Share failed:', err);
-                            }}
-                        }} else {{
-                            try {{
-                                await navigator.clipboard.writeText(textData);
-                                alert("El navegador no soporta compartir directo, pero el recibo ha sido copiado al portapapeles.");
-                            }} catch (clipErr) {{
-                                alert("No se pudo copiar el recibo.");
-                            }}
-                        }}
-                    }};
-                </script>
-            </body>
-            </html>
-            """
-            components.html(share_html, height=50)
+            import urllib.parse
+            whatsapp_url = f"https://api.whatsapp.com/send?text={urllib.parse.quote(st.session_state.generated_text)}"
+            st.link_button(
+                label="📲 Compartir por WhatsApp",
+                url=whatsapp_url,
+                use_container_width=True
+            )
         
         if st.button("🔄 Crear Nueva Venta"):
             # Clear session state and go back to step 1
