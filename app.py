@@ -2553,7 +2553,7 @@ with tab_stock:
                     
                     with st.form("edit_entrada_form"):
                         e_ent_date = st.date_input("Fecha:", value=ent_fecha_parsed, key="edit_ent_date")
-                        e_ent_qty = st.number_input("Cantidad (piezas):", min_value=1, step=10, value=ent_qty, key="edit_ent_qty")
+                        e_ent_qty = st.number_input("Cantidad (piezas):", min_value=min(1, ent_qty), step=10, value=ent_qty, key="edit_ent_qty")
                         e_ent_obs = st.text_input("Observación:", value=ent_obs, key="edit_ent_obs").strip().upper()
                         
                         c_ent_edit, c_ent_del = st.columns(2)
