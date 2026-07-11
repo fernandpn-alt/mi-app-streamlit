@@ -876,9 +876,9 @@ def update_abono_in_salidas(folio, new_abonado, new_pendiente, nuevo_estado):
     global use_gsheets
     if os.path.exists(REC_FILE):
         df_local = pd.read_csv(REC_FILE)
-        df_local.loc[df_local['FOLIO'] == folio, 'ABONADO'] = new_abonado
-        df_local.loc[df_local['FOLIO'] == folio, 'PENDIENTE'] = new_pendiente
-        df_local.loc[df_local['FOLIO'] == folio, 'ESTADO_PAGO'] = nuevo_estado
+        df_local.loc[df_local['FOLIO'].astype(str) == str(folio), 'ABONADO'] = new_abonado
+        df_local.loc[df_local['FOLIO'].astype(str) == str(folio), 'PENDIENTE'] = new_pendiente
+        df_local.loc[df_local['FOLIO'].astype(str) == str(folio), 'ESTADO_PAGO'] = nuevo_estado
         df_local.to_csv(REC_FILE, index=False)
         st.cache_data.clear()
         
@@ -928,18 +928,20 @@ def revoke_recibo_in_salidas(folio):
     global use_gsheets
     if os.path.exists(REC_FILE):
         df_local = pd.read_csv(REC_FILE)
-        idx_local = df_local[df_local['FOLIO'] == folio].index[0]
-        original_summary = df_local.at[idx_local, 'PRODUCTOS']
-        
-        df_local.at[idx_local, 'PRODUCTOS'] = f"[REVOCADO] {original_summary}"
-        df_local.at[idx_local, 'TOTAL'] = 0.0
-        df_local.at[idx_local, 'COSTO'] = 0.0
-        df_local.at[idx_local, 'GANANCIA'] = 0.0
-        df_local.at[idx_local, 'ABONADO'] = 0.0
-        df_local.at[idx_local, 'PENDIENTE'] = 0.0
-        df_local.at[idx_local, 'ESTADO_PAGO'] = "REVOCADO"
-        df_local.to_csv(REC_FILE, index=False)
-        st.cache_data.clear()
+        matches = df_local[df_local['FOLIO'].astype(str) == str(folio)]
+        if len(matches) > 0:
+            idx_local = matches.index[0]
+            original_summary = df_local.at[idx_local, 'PRODUCTOS']
+            
+            df_local.at[idx_local, 'PRODUCTOS'] = f"[REVOCADO] {original_summary}"
+            df_local.at[idx_local, 'TOTAL'] = 0.0
+            df_local.at[idx_local, 'COSTO'] = 0.0
+            df_local.at[idx_local, 'GANANCIA'] = 0.0
+            df_local.at[idx_local, 'ABONADO'] = 0.0
+            df_local.at[idx_local, 'PENDIENTE'] = 0.0
+            df_local.at[idx_local, 'ESTADO_PAGO'] = "REVOCADO"
+            df_local.to_csv(REC_FILE, index=False)
+            st.cache_data.clear()
         
     if use_gsheets and sh is not None:
         try:
