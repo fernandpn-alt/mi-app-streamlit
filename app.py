@@ -619,7 +619,7 @@ def load_recibos_from_salidas():
                 if not cliente or cliente == "CLIENTE":
                     continue  # Skip empty or header rows
                     
-                folio = row[18].strip() if row[18] else f"F-{len(records)+1:03d}"
+                folio = row[2].strip() if row[2] else f"F-{len(records)+1:03d}"
                 fecha = row[4].strip()
                 
                 # Parse flavor quantities from Columns F to M (index 5 to 12)
@@ -653,31 +653,50 @@ def load_recibos_from_salidas():
                 except ValueError:
                     ganancia = 0.0
                     
-                # Payment Info (from columns Q, R, T / indices 16, 17, 19)
-                if row[16].strip() or row[17].strip() or row[19].strip():
-                    try:
-                        abonado = float(row[16].replace("$", "").replace(",", "").strip()) if row[16] else 0.0
-                    except ValueError:
-                        abonado = 0.0
-                    try:
-                        pendiente = float(row[17].replace("$", "").replace(",", "").strip()) if row[17] else 0.0
-                    except ValueError:
-                        pendiente = 0.0
-                    estado_pago = row[19].strip() if row[19] else ("Pagado" if pendiente == 0 else "Por Pagar")
-                    tipo_pago = row[2].strip() if row[2] else ("Contado" if (pendiente == 0 or "FUEGUITO" in products_summary) else "Consigna")
-                else:
-                    # Fallback for old rows (assume fully paid)
-                    if is_revoked:
-                        abonado = 0.0
-                        pendiente = 0.0
-                        estado_pago = "REVOCADO"
-                        tipo_pago = "Contado"
+                # Payment Info (from columns Q, R, S, T / indices 16, 17, 18, 19)
+                try:
+                    abonado = float(row[16].replace("$", "").replace(",", "").strip()) if row[16] else 0.0
+                except ValueError:
+                    abonado = 0.0
+                try:
+                    pendiente = float(row[17].replace("$", "").replace(",", "").strip()) if row[17] else 0.0
+                except ValueError:
+                    pendiente = 0.0
+                    
+                col_c_val = row[2].strip()
+                col_s_val = row[18].strip()
+                col_t_val = row[19].strip()
+                
+                # Detect if the row is swapped
+                is_swapped = False
+                if col_c_val in ["Contado", "Consigna", "Por Pagar", "Pagado", "REVOCADO"] or col_s_val.startswith("F-") or col_s_val.isdigit():
+                    is_swapped = True
+                    
+                if is_swapped:
+                    folio = col_s_val if col_s_val else f"F-{len(records)+1:03d}"
+                    if col_t_val in ["Pagado", "Por Pagar", "REVOCADO"]:
+                        estado_pago = col_t_val
+                        tipo_pago = col_c_val if col_c_val in ["Contado", "Consigna"] else "Consigna"
+                    elif col_c_val in ["Pagado", "Por Pagar", "REVOCADO"]:
+                        estado_pago = col_c_val
+                        tipo_pago = col_t_val if col_t_val in ["Contado", "Consigna"] else "Consigna"
                     else:
-                        abonado = total
-                        pendiente = 0.0
-                        estado_pago = "Pagado"
-                        tipo_pago = "Contado" if (total > 0) else "Consigna"
-                        
+                        tipo_pago = col_c_val
+                        estado_pago = col_t_val if col_t_val else ("Pagado" if (pendiente == 0) else "Por Pagar")
+                else:
+                    folio = col_c_val if col_c_val else f"F-{len(records)+1:03d}"
+                    if row[16].strip() or row[17].strip() or row[18].strip() or row[19].strip():
+                        estado_pago = col_s_val if col_s_val else ("Pagado" if pendiente == 0 else "Por Pagar")
+                        tipo_pago = col_t_val if col_t_val else ("Contado" if (pendiente == 0 or "FUEGUITO" in products_summary) else "Consigna")
+                    else:
+                        # Fallback for old rows (assume fully paid)
+                        if is_revoked:
+                            estado_pago = "REVOCADO"
+                            tipo_pago = "Contado"
+                        else:
+                            estado_pago = "Pagado"
+                            tipo_pago = "Contado" if (total > 0) else "Consigna"
+                            
                 records.append({
                     "FOLIO": folio,
                     "FECHA": fecha,
@@ -752,7 +771,7 @@ def save_recibo_to_salidas(folio, fecha, cliente, cart, total_sale, total_cost, 
             new_row = [
                 "", # Col A (1)
                 "", # Col B (2)
-                payment_term, # Col C (3) (TIPO_PAGO)
+                folio, # Col C (3) (FOLIO)
                 cliente, # Col D (4) (CLIENTE)
                 fecha, # Col E (5) (FECHA)
                 qtys[0] if qtys[0] > 0 else "", # Col F (6) (FUEGO)
@@ -768,8 +787,8 @@ def save_recibo_to_salidas(folio, fecha, cliente, cart, total_sale, total_cost, 
                 f"=O{new_row_idx}-N{new_row_idx}", # Col P (16) (GANANCIA BRUTA)
                 abonado, # Col Q (17) (ABONADO)
                 pendiente, # Col R (18) (PENDIENTE)
-                folio, # Col S (19) (FOLIO)
-                estado_pago # Col T (20) (ESTADO_PAGO)
+                estado_pago, # Col S (19) (ESTADO_PAGO)
+                payment_term # Col T (20) (TIPO_PAGO)
             ]
             ws.append_row(new_row, value_input_option="USER_ENTERED")
             return True
@@ -795,11 +814,11 @@ def update_abono_in_salidas(folio, new_abonado, new_pendiente, nuevo_estado):
             for i, row in enumerate(all_values):
                 if i < 2:
                     continue
-                if len(row) > 18 and row[18].strip() == folio.strip():
+                if len(row) > 2 and row[2].strip() == folio.strip():
                     row_idx = i + 1
                     ws.update_cell(row_idx, 17, new_abonado)  # Col Q (17)
                     ws.update_cell(row_idx, 18, new_pendiente) # Col R (18)
-                    ws.update_cell(row_idx, 20, nuevo_estado)  # Col T (20)
+                    ws.update_cell(row_idx, 19, nuevo_estado)  # Col S (19)
                     break
             return True
         except Exception as e:
@@ -831,7 +850,7 @@ def revoke_recibo_in_salidas(folio):
             for i, row in enumerate(all_values):
                 if i < 2:
                     continue
-                if len(row) > 18 and row[18].strip() == folio.strip():
+                if len(row) > 2 and row[2].strip() == folio.strip():
                     row_idx = i + 1
                     original_name = row[3]
                     ws.update_cell(row_idx, 4, f"[REVOCADO] {original_name}") # Col D (4)
@@ -840,7 +859,7 @@ def revoke_recibo_in_salidas(folio):
                     ws.update_cell(row_idx, 15, 0.0) # Column O (15, VENTA)
                     ws.update_cell(row_idx, 17, 0.0) # Column Q (17, ABONADO)
                     ws.update_cell(row_idx, 18, 0.0) # Column R (18, PENDIENTE)
-                    ws.update_cell(row_idx, 20, "REVOCADO") # Column T (20, ESTADO_PAGO)
+                    ws.update_cell(row_idx, 19, "REVOCADO") # Column S (19, ESTADO_PAGO)
                     break
             return True
         except Exception as e:
@@ -1905,13 +1924,37 @@ with tab_rec:
     
     # 1. Receipts Table
     st.markdown("### Historial de Recibos")
-    rec_filter = st.selectbox("Filtrar recibos:", ["Todos", "Solo Pagados", "Solo Por Pagar (Pendientes)"])
-    
+    # Search filters
+    col_f1, col_f2, col_f3, col_f4 = st.columns(4)
+    with col_f1:
+        rec_filter = st.selectbox("Filtrar Estado:", ["Todos", "Solo Pagados", "Solo Por Pagar (Pendientes)", "Solo Revocados"])
+    with col_f2:
+        search_folio = st.text_input("Buscar Folio:", "").strip()
+    with col_f3:
+        search_cliente = st.text_input("Buscar Cliente:", "").strip()
+    with col_f4:
+        search_producto = st.text_input("Buscar Producto/Sabor:", "").strip()
+        
     df_rec_filtered = df_recibos.copy()
+    
+    # Sort: newest at the top (chronological reverse order)
+    df_rec_filtered = df_rec_filtered.iloc[::-1].reset_index(drop=True)
+    
+    # Filter by payment status
     if rec_filter == "Solo Pagados":
         df_rec_filtered = df_rec_filtered[df_rec_filtered['ESTADO_PAGO'] == "Pagado"]
     elif rec_filter == "Solo Por Pagar (Pendientes)":
         df_rec_filtered = df_rec_filtered[df_rec_filtered['ESTADO_PAGO'] == "Por Pagar"]
+    elif rec_filter == "Solo Revocados":
+        df_rec_filtered = df_rec_filtered[df_rec_filtered['ESTADO_PAGO'] == "REVOCADO"]
+        
+    # Filter by text search
+    if search_folio:
+        df_rec_filtered = df_rec_filtered[df_rec_filtered['FOLIO'].astype(str).str.contains(search_folio, case=False, na=False)]
+    if search_cliente:
+        df_rec_filtered = df_rec_filtered[df_rec_filtered['CLIENTE'].astype(str).str.contains(search_cliente, case=False, na=False)]
+    if search_producto:
+        df_rec_filtered = df_rec_filtered[df_rec_filtered['PRODUCTOS'].astype(str).str.contains(search_producto, case=False, na=False)]
         
     st.dataframe(
         df_rec_filtered,
