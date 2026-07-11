@@ -2504,54 +2504,74 @@ with tab_stock:
         if len(df_entradas) == 0:
             st.info("No hay registros de entradas de stock.")
         else:
+            # Search filters for warehouse entries
+            col_ef1, col_ef2 = st.columns(2)
+            with col_ef1:
+                search_ent_prod = st.text_input("Buscar Producto:", "", key="search_ent_prod").strip()
+            with col_ef2:
+                search_ent_fecha = st.text_input("Buscar Fecha:", "", key="search_ent_fecha").strip()
+                
+            df_entradas_filtered = df_entradas.copy()
+            
+            # Sort: newest at the top (reverse chronological order)
+            df_entradas_filtered = df_entradas_filtered.iloc[::-1].reset_index(drop=True)
+            
+            if search_ent_prod:
+                df_entradas_filtered = df_entradas_filtered[df_entradas_filtered['PRODUCTO'].astype(str).str.contains(search_ent_prod, case=False, na=False)]
+            if search_ent_fecha:
+                df_entradas_filtered = df_entradas_filtered[df_entradas_filtered['FECHA'].astype(str).str.contains(search_ent_fecha, case=False, na=False)]
+                
             col_list_ent, col_edit_ent = st.columns([1.5, 1])
             
             with col_list_ent:
                 st.dataframe(
-                    df_entradas[['FECHA', 'CÓDIGO', 'PRODUCTO', 'DESCRIPCIÓN', 'CANTIDAD', 'OBSERVACIÓN']],
+                    df_entradas_filtered[['FECHA', 'CÓDIGO', 'PRODUCTO', 'DESCRIPCIÓN', 'CANTIDAD', 'OBSERVACIÓN']],
                     use_container_width=True,
                     hide_index=True
                 )
                 
             with col_edit_ent:
                 st.markdown("##### Editar o Eliminar Entrada")
-                entrada_options = []
-                for _, row in df_entradas.iterrows():
-                    entrada_options.append(f"{row['ROW_IDX']} - {row['FECHA']} - {row['PRODUCTO']} ({row['CANTIDAD']} pz)")
-                    
-                selected_ent_str = st.selectbox("Selecciona la entrada a modificar:", entrada_options)
-                sel_ent_row_idx = int(selected_ent_str.split(" - ")[0])
-                selected_ent_row = df_entradas[df_entradas['ROW_IDX'] == sel_ent_row_idx].iloc[0]
-                
-                ent_fecha_parsed = safe_parse_date(selected_ent_row['FECHA'])
-                ent_qty = int(selected_ent_row['CANTIDAD'])
-                ent_obs = selected_ent_row['OBSERVACIÓN']
-                ent_code = selected_ent_row['CÓDIGO']
-                ent_prod = selected_ent_row['PRODUCTO']
-                ent_desc = selected_ent_row['DESCRIPCIÓN']
-                ent_brand = selected_ent_row['MARCA']
-                
-                with st.form("edit_entrada_form"):
-                    e_ent_date = st.date_input("Fecha:", value=ent_fecha_parsed, key="edit_ent_date")
-                    e_ent_qty = st.number_input("Cantidad (piezas):", min_value=1, step=10, value=ent_qty, key="edit_ent_qty")
-                    e_ent_obs = st.text_input("Observación:", value=ent_obs, key="edit_ent_obs").strip().upper()
-                    
-                    c_ent_edit, c_ent_del = st.columns(2)
-                    with c_ent_edit:
-                        save_ent_edit = st.form_submit_button("Guardar Cambios")
-                    with c_ent_del:
-                        delete_ent = st.form_submit_button("🗑️ Eliminar Entrada", type="primary")
+                if len(df_entradas_filtered) == 0:
+                    st.info("No hay entradas que coincidan con la búsqueda.")
+                else:
+                    entrada_options = []
+                    for _, row in df_entradas_filtered.iterrows():
+                        entrada_options.append(f"{row['ROW_IDX']} - {row['FECHA']} - {row['PRODUCTO']} ({row['CANTIDAD']} pz)")
                         
-                    if save_ent_edit:
-                        formatted_ent_date = f"{e_ent_date.day}/{e_ent_date.month}/{e_ent_date.year}"
-                        update_entrada_in_sheet(sel_ent_row_idx, ent_code, ent_prod, ent_desc, ent_brand, ent_qty, e_ent_qty, formatted_ent_date, e_ent_obs)
-                        st.success("✏️ Entrada modificada exitosamente.")
-                        st.rerun()
+                    selected_ent_str = st.selectbox("Selecciona la entrada a modificar:", entrada_options)
+                    sel_ent_row_idx = int(selected_ent_str.split(" - ")[0])
+                    selected_ent_row = df_entradas[df_entradas['ROW_IDX'] == sel_ent_row_idx].iloc[0]
+                    
+                    ent_fecha_parsed = safe_parse_date(selected_ent_row['FECHA'])
+                    ent_qty = int(selected_ent_row['CANTIDAD'])
+                    ent_obs = selected_ent_row['OBSERVACIÓN']
+                    ent_code = selected_ent_row['CÓDIGO']
+                    ent_prod = selected_ent_row['PRODUCTO']
+                    ent_desc = selected_ent_row['DESCRIPCIÓN']
+                    ent_brand = selected_ent_row['MARCA']
+                    
+                    with st.form("edit_entrada_form"):
+                        e_ent_date = st.date_input("Fecha:", value=ent_fecha_parsed, key="edit_ent_date")
+                        e_ent_qty = st.number_input("Cantidad (piezas):", min_value=1, step=10, value=ent_qty, key="edit_ent_qty")
+                        e_ent_obs = st.text_input("Observación:", value=ent_obs, key="edit_ent_obs").strip().upper()
                         
-                    if delete_ent:
-                        delete_entrada_in_sheet(sel_ent_row_idx, ent_code, ent_qty)
-                        st.success("🗑️ Entrada eliminada exitosamente y stock ajustado.")
-                        st.rerun()
+                        c_ent_edit, c_ent_del = st.columns(2)
+                        with c_ent_edit:
+                            save_ent_edit = st.form_submit_button("Guardar Cambios")
+                        with c_ent_del:
+                            delete_ent = st.form_submit_button("🗑️ Eliminar Entrada", type="primary")
+                            
+                        if save_ent_edit:
+                            formatted_ent_date = f"{e_ent_date.day}/{e_ent_date.month}/{e_ent_date.year}"
+                            update_entrada_in_sheet(sel_ent_row_idx, ent_code, ent_prod, ent_desc, ent_brand, ent_qty, e_ent_qty, formatted_ent_date, e_ent_obs)
+                            st.success("✏️ Entrada modificada exitosamente.")
+                            st.rerun()
+                            
+                        if delete_ent:
+                            delete_entrada_in_sheet(sel_ent_row_idx, ent_code, ent_qty)
+                            st.success("🗑️ Entrada eliminada exitosamente y stock ajustado.")
+                            st.rerun()
 
 # TAB 6: ASISTENTE DE IA (ANTIGRAVITY)
 with tab_ia:
