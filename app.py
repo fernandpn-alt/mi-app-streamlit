@@ -2129,40 +2129,40 @@ with tab_rec:
             with st.form("revoke_form"):
                 revoke_options = [f"{row['FOLIO']} - {row['CLIENTE']} (Total: ${row['TOTAL']:.2f})" for _, row in active_tickets_filtered.iterrows()]
                 selected_revoke_str = st.selectbox("Selecciona el Recibo a Revocar:", revoke_options)
-            confirm_revoke = st.checkbox("Confirmo que deseo revocar esta factura permanentemente y devolver los productos al inventario.")
-            
-            submit_revoke = st.form_submit_button("🚨 Revocar Factura", type="primary")
-            
-            if submit_revoke:
-                if not confirm_revoke:
-                    st.error("Por favor, marca la casilla de confirmación para revocar.")
-                else:
-                    selected_folio = selected_revoke_str.split(" - ")[0]
-                    ticket_idx = df_recibos[df_recibos['FOLIO'] == selected_folio].index[0]
-                    
-                    # 1. Parse products and restore stock
-                    products_summary = df_recibos.at[ticket_idx, 'PRODUCTOS']
-                    parts = products_summary.split("; ")
-                    restored_details = []
-                    for part in parts:
-                        if "x " in part:
-                            qty_str, prod_name = part.split("x ", 1)
-                            qty = int(qty_str)
-                            # Find product
-                            prod_matches = df_productos[df_productos['PRODUCTO'].str.strip().str.upper() == prod_name.strip().upper()]
-                            if len(prod_matches) > 0:
-                                p_idx = prod_matches.index[0]
-                                df_productos.at[p_idx, 'STOCK'] = int(df_productos.at[p_idx, 'STOCK']) + qty
-                                restored_details.append(f"{qty} pz de {prod_name}")
-                    
-                    # Save updated products
-                    save_productos(df_productos)
-                    
-                    # Revoke receipt in Google Sheet and CSV
-                    revoke_recibo_in_salidas(selected_folio)
-                    
-                    st.success(f"🎉 Factura {selected_folio} revocada exitosamente. Se devolvieron al inventario: {', '.join(restored_details)}.")
-                    st.rerun()
+                confirm_revoke = st.checkbox("Confirmo que deseo revocar esta factura permanentemente y devolver los productos al inventario.")
+                
+                submit_revoke = st.form_submit_button("🚨 Revocar Factura", type="primary")
+                
+                if submit_revoke:
+                    if not confirm_revoke:
+                        st.error("Por favor, marca la casilla de confirmación para revocar.")
+                    else:
+                        selected_folio = selected_revoke_str.split(" - ")[0]
+                        ticket_idx = df_recibos[df_recibos['FOLIO'] == selected_folio].index[0]
+                        
+                        # 1. Parse products and restore stock
+                        products_summary = df_recibos.at[ticket_idx, 'PRODUCTOS']
+                        parts = products_summary.split("; ")
+                        restored_details = []
+                        for part in parts:
+                            if "x " in part:
+                                qty_str, prod_name = part.split("x ", 1)
+                                qty = int(qty_str)
+                                # Find product
+                                prod_matches = df_productos[df_productos['PRODUCTO'].str.strip().str.upper() == prod_name.strip().upper()]
+                                if len(prod_matches) > 0:
+                                    p_idx = prod_matches.index[0]
+                                    df_productos.at[p_idx, 'STOCK'] = int(df_productos.at[p_idx, 'STOCK']) + qty
+                                    restored_details.append(f"{qty} pz de {prod_name}")
+                        
+                        # Save updated products
+                        save_productos(df_productos)
+                        
+                        # Revoke receipt in Google Sheet and CSV
+                        revoke_recibo_in_salidas(selected_folio)
+                        
+                        st.success(f"🎉 Factura {selected_folio} revocada exitosamente. Se devolvieron al inventario: {', '.join(restored_details)}.")
+                        st.rerun()
                     
     st.divider()
     
