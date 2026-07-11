@@ -2023,24 +2023,13 @@ Falta por pagar: ${pendiente:.2f}
         st.info("💡 Haz clic en el botón de copiar en la esquina superior derecha del siguiente cuadro de código para enviarlo fácilmente por WhatsApp.")
         st.code(st.session_state.generated_text, language="text")
         
-        # Actions container using columns
-        col_actions1, col_actions2 = st.columns(2)
-        with col_actions1:
-            st.download_button(
-                label="📥 Descargar Recibo (.txt)",
-                data=st.session_state.generated_text,
-                file_name=f"recibo_{st.session_state.generated_folio}.txt",
-                mime="text/plain",
-                use_container_width=True
-            )
-        with col_actions2:
-            import urllib.parse
-            whatsapp_url = f"https://api.whatsapp.com/send?text={urllib.parse.quote(st.session_state.generated_text)}"
-            st.link_button(
-                label="📲 Compartir por WhatsApp",
-                url=whatsapp_url,
-                use_container_width=True
-            )
+        # WhatsApp Share Link
+        st.download_button(
+            label="📥 Descargar Recibo (.txt)",
+            data=st.session_state.generated_text,
+            file_name=f"recibo_{st.session_state.generated_folio}.txt",
+            mime="text/plain"
+        )
         
         if st.button("🔄 Crear Nueva Venta"):
             # Clear session state and go back to step 1
