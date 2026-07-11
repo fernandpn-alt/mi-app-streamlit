@@ -2065,7 +2065,7 @@ with tab_rec:
     
     # Register installment / abono section
     st.markdown("#### Registrar Abono / Pago a Recibo")
-    pending_tickets = df_recibos[df_recibos['ESTADO_PAGO'] == "Por Pagar"]
+    pending_tickets = df_recibos[df_recibos['ESTADO_PAGO'] == "Por Pagar"].iloc[::-1].reset_index(drop=True)
     
     if len(pending_tickets) == 0:
         st.info("No hay recibos pendientes de pago.")
@@ -2105,19 +2105,30 @@ with tab_rec:
     if len(active_tickets) == 0:
         st.info("No hay recibos activos para revocar.")
     else:
-        # Sort by Folio number descending (newest first) to guarantee correct order
-        def get_folio_num(folio_str):
-            try:
-                return int(''.join(filter(str.isdigit, str(folio_str))))
-            except Exception:
-                return 0
-        active_tickets_sorted = active_tickets.copy()
-        active_tickets_sorted['FOLIO_NUM'] = active_tickets_sorted['FOLIO'].apply(get_folio_num)
-        active_tickets_sorted = active_tickets_sorted.sort_values(by='FOLIO_NUM', ascending=False)
+        # Search filters for revocation
+        col_r1, col_r2 = st.columns(2)
+        with col_r1:
+            search_rev_folio = st.text_input("Buscar Folio a Revocar:", "").strip()
+        with col_r2:
+            search_rev_cliente = st.text_input("Buscar Cliente a Revocar:", "").strip()
+            
+        active_tickets_filtered = active_tickets.copy()
         
-        with st.form("revoke_form"):
-            revoke_options = [f"{row['FOLIO']} - {row['CLIENTE']} (Total: ${row['TOTAL']:.2f})" for _, row in active_tickets_sorted.iterrows()]
-            selected_revoke_str = st.selectbox("Selecciona el Recibo a Revocar:", revoke_options)
+        # Sort: newest at the top (reverse chronological order)
+        active_tickets_filtered = active_tickets_filtered.iloc[::-1].reset_index(drop=True)
+        
+        # Apply filters
+        if search_rev_folio:
+            active_tickets_filtered = active_tickets_filtered[active_tickets_filtered['FOLIO'].astype(str).str.contains(search_rev_folio, case=False, na=False)]
+        if search_rev_cliente:
+            active_tickets_filtered = active_tickets_filtered[active_tickets_filtered['CLIENTE'].astype(str).str.contains(search_rev_cliente, case=False, na=False)]
+            
+        if len(active_tickets_filtered) == 0:
+            st.info("No hay recibos activos que coincidan con la búsqueda.")
+        else:
+            with st.form("revoke_form"):
+                revoke_options = [f"{row['FOLIO']} - {row['CLIENTE']} (Total: ${row['TOTAL']:.2f})" for _, row in active_tickets_filtered.iterrows()]
+                selected_revoke_str = st.selectbox("Selecciona el Recibo a Revocar:", revoke_options)
             confirm_revoke = st.checkbox("Confirmo que deseo revocar esta factura permanentemente y devolver los productos al inventario.")
             
             submit_revoke = st.form_submit_button("🚨 Revocar Factura", type="primary")
