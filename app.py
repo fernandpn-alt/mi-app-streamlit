@@ -2605,7 +2605,11 @@ with tab_ia:
     if not api_key:
         st.warning("⚠️ **Falta la API Key:** Ingresa tu Gemini API Key en la barra lateral para poder chatear con tu asistente.")
     else:
+        # Load google-generativeai dynamically
         try:
+            import google.generativeai as genai
+            genai.configure(api_key=api_key)
+            
             # Setup session state for chatbot
             if "ia_messages" not in st.session_state:
                 st.session_state.ia_messages = [
@@ -2651,24 +2655,10 @@ Asistente:"""
 
                 with st.chat_message("assistant", avatar="🤖"):
                     with st.spinner("Analizando información del negocio..."):
-                        import requests
-                        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
-                        headers = {"Content-Type": "application/json"}
-                        payload = {
-                            "contents": [
-                                {
-                                    "parts": [
-                                        {"text": context_prompt}
-                                    ]
-                                }
-                            ]
-                        }
-                        response = requests.post(url, json=payload, headers=headers)
-                        response.raise_for_status()
-                        res_data = response.json()
-                        ai_response_text = res_data["candidates"][0]["content"]["parts"][0]["text"]
-                        st.markdown(ai_response_text)
-                st.session_state.ia_messages.append({"role": "assistant", "content": ai_response_text})
+                        model = genai.GenerativeModel("gemini-2.5-flash")
+                        response = model.generate_content(context_prompt)
+                        st.markdown(response.text)
+                st.session_state.ia_messages.append({"role": "assistant", "content": response.text})
                 
         except Exception as e:
             st.error(f"Error al conectar con la IA de Gemini: {e}")
