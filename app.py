@@ -544,26 +544,26 @@ def get_sheets_connection(url):
                     
                     # Map Row 3-10 to SALIDAS columns to fix missing calculations using batch update
                     formulas = [
-                        ["=SUM(SALIDAS!E3:E1000)"],
                         ["=SUM(SALIDAS!F3:F1000)"],
                         ["=SUM(SALIDAS!G3:G1000)"],
                         ["=SUM(SALIDAS!H3:H1000)"],
                         ["=SUM(SALIDAS!I3:I1000)"],
                         ["=SUM(SALIDAS!J3:J1000)"],
+                        ["=SUM(SALIDAS!K3:K1000)"],
                         ["=SUM(SALIDAS!L3:L1000)"],
-                        ["=SUM(SALIDAS!K3:K1000)"]
+                        ["=SUM(SALIDAS!M3:M1000)"]
                     ]
                     try:
                         ws_stock.update("G3:G10", formulas)
                     except Exception:
-                        ws_stock.update_cell(3, 7, "=SUM(SALIDAS!E3:E1000)")
-                        ws_stock.update_cell(4, 7, "=SUM(SALIDAS!F3:F1000)")
-                        ws_stock.update_cell(5, 7, "=SUM(SALIDAS!G3:G1000)")
-                        ws_stock.update_cell(6, 7, "=SUM(SALIDAS!H3:H1000)")
-                        ws_stock.update_cell(7, 7, "=SUM(SALIDAS!I3:I1000)")
-                        ws_stock.update_cell(8, 7, "=SUM(SALIDAS!J3:J1000)")
+                        ws_stock.update_cell(3, 7, "=SUM(SALIDAS!F3:F1000)")
+                        ws_stock.update_cell(4, 7, "=SUM(SALIDAS!G3:G1000)")
+                        ws_stock.update_cell(5, 7, "=SUM(SALIDAS!H3:H1000)")
+                        ws_stock.update_cell(6, 7, "=SUM(SALIDAS!I3:I1000)")
+                        ws_stock.update_cell(7, 7, "=SUM(SALIDAS!J3:J1000)")
+                        ws_stock.update_cell(8, 7, "=SUM(SALIDAS!K3:K1000)")
                         ws_stock.update_cell(9, 7, "=SUM(SALIDAS!L3:L1000)")
-                        ws_stock.update_cell(10, 7, "=SUM(SALIDAS!K3:K1000)")
+                        ws_stock.update_cell(10, 7, "=SUM(SALIDAS!M3:M1000)")
                 except Exception:
                     pass
     except Exception as e:
@@ -613,19 +613,19 @@ def load_recibos_from_salidas():
             product_names = ["FUEGO", "RANCHERO", "SALSAS NEGRAS", "JALAPEÑO", "QUESO", "NATURAL", "PIQUIN", "FUEGUITO"]
             
             for row in rows:
-                row = row + [""] * (19 - len(row))
+                row = row + [""] * (20 - len(row))
                 
-                cliente = row[2].strip().upper()
+                cliente = row[3].strip().upper()
                 if not cliente or cliente == "CLIENTE":
                     continue  # Skip empty or header rows
                     
-                folio = row[1].strip() if row[1] else f"F-{len(records)+1:03d}"
-                fecha = row[3].strip()
+                folio = row[18].strip() if row[18] else f"F-{len(records)+1:03d}"
+                fecha = row[4].strip()
                 
-                # Parse flavor quantities from Columns E to L (index 4 to 11)
+                # Parse flavor quantities from Columns F to M (index 5 to 12)
                 products_list = []
                 for p_idx, p_name in enumerate(product_names):
-                    col_val = row[4 + p_idx].strip()
+                    col_val = row[5 + p_idx].strip()
                     if col_val:
                         try:
                             qty = int(float(col_val))
@@ -637,34 +637,34 @@ def load_recibos_from_salidas():
                 products_summary = "; ".join(products_list)
                 is_revoked = cliente.startswith("[REVOCADO]")
                 
-                # Financials (Columns M, N, O)
+                # Financials (Columns N, O, P)
                 try:
-                    total = float(row[13].replace("$", "").replace(",", "").strip()) if row[13] else 0.0
+                    total = float(row[14].replace("$", "").replace(",", "").strip()) if row[14] else 0.0
                 except ValueError:
                     total = 0.0
                     
                 try:
-                    costo_total = float(row[12].replace("$", "").replace(",", "").strip()) if row[12] else 0.0
+                    costo_total = float(row[13].replace("$", "").replace(",", "").strip()) if row[13] else 0.0
                 except ValueError:
                     costo_total = 0.0
                     
                 try:
-                    ganancia = float(row[14].replace("$", "").replace(",", "").strip()) if row[14] else 0.0
+                    ganancia = float(row[15].replace("$", "").replace(",", "").strip()) if row[15] else 0.0
                 except ValueError:
                     ganancia = 0.0
                     
-                # Payment Info (from columns P, Q, R, S / indices 15, 16, 17, 18)
-                if row[15].strip() or row[16].strip() or row[17].strip():
+                # Payment Info (from columns Q, R, T / indices 16, 17, 19)
+                if row[16].strip() or row[17].strip() or row[19].strip():
                     try:
-                        abonado = float(row[15].replace("$", "").replace(",", "").strip()) if row[15] else 0.0
+                        abonado = float(row[16].replace("$", "").replace(",", "").strip()) if row[16] else 0.0
                     except ValueError:
                         abonado = 0.0
                     try:
-                        pendiente = float(row[16].replace("$", "").replace(",", "").strip()) if row[16] else 0.0
+                        pendiente = float(row[17].replace("$", "").replace(",", "").strip()) if row[17] else 0.0
                     except ValueError:
                         pendiente = 0.0
-                    estado_pago = row[17].strip() if row[17] else ("Pagado" if pendiente == 0 else "Por Pagar")
-                    tipo_pago = row[18].strip() if row[18] else ("Contado" if (pendiente == 0 or "FUEGUITO" in products_summary) else "Consigna")
+                    estado_pago = row[19].strip() if row[19] else ("Pagado" if pendiente == 0 else "Por Pagar")
+                    tipo_pago = row[2].strip() if row[2] else ("Contado" if (pendiente == 0 or "FUEGUITO" in products_summary) else "Consigna")
                 else:
                     # Fallback for old rows (assume fully paid)
                     if is_revoked:
@@ -748,27 +748,28 @@ def save_recibo_to_salidas(folio, fecha, cliente, cart, total_sale, total_cost, 
                     idx = product_names.index(item_name)
                     qtys[idx] += item['CANTIDAD']
                     
-            # Map elements to the correct sheet columns (preserving formulas in columns M and O)
+            # Map elements to the correct sheet columns (preserving formulas in columns N and P)
             new_row = [
                 "", # Col A (1)
-                folio, # Col B (2)
-                cliente, # Col C (3)
-                fecha, # Col D (4)
-                qtys[0] if qtys[0] > 0 else "", # Col E (5)
-                qtys[1] if qtys[1] > 0 else "", # Col F (6)
-                qtys[2] if qtys[2] > 0 else "", # Col G (7)
-                qtys[3] if qtys[3] > 0 else "", # Col H (8)
-                qtys[4] if qtys[4] > 0 else "", # Col I (9)
-                qtys[5] if qtys[5] > 0 else "", # Col J (10)
-                qtys[6] if qtys[6] > 0 else "", # Col K (11) (PIQUIN)
-                qtys[7] if qtys[7] > 0 else "", # Col L (12) (FUEGUITO)
-                f"=SUM(E{new_row_idx}*PRODUCTOS!$G$3,F{new_row_idx}*PRODUCTOS!$G$4,G{new_row_idx}*PRODUCTOS!$G$5,H{new_row_idx}*PRODUCTOS!$G$6,I{new_row_idx}*PRODUCTOS!$G$7,J{new_row_idx}*PRODUCTOS!$G$8,K{new_row_idx}*PRODUCTOS!$G$10,L{new_row_idx}*PRODUCTOS!$G$9)", # Col M (13) (COMPRA)
-                total_sale, # Col N (14) (VENTA)
-                f"=N{new_row_idx}-M{new_row_idx}", # Col O (15) (GANANCIA BRUTA)
-                abonado, # Col P (16) (ABONADO)
-                pendiente, # Col Q (17) (PENDIENTE)
-                estado_pago, # Col R (18) (ESTADO_PAGO)
-                payment_term # Col S (19) (TIPO_PAGO)
+                "", # Col B (2)
+                payment_term, # Col C (3) (TIPO_PAGO)
+                cliente, # Col D (4) (CLIENTE)
+                fecha, # Col E (5) (FECHA)
+                qtys[0] if qtys[0] > 0 else "", # Col F (6) (FUEGO)
+                qtys[1] if qtys[1] > 0 else "", # Col G (7) (RANCHERO)
+                qtys[2] if qtys[2] > 0 else "", # Col H (8) (SALSAS NEGRAS)
+                qtys[3] if qtys[3] > 0 else "", # Col I (9) (JALAPEÑO)
+                qtys[4] if qtys[4] > 0 else "", # Col J (10) (QUESO)
+                qtys[5] if qtys[5] > 0 else "", # Col K (11) (NATURAL)
+                qtys[6] if qtys[6] > 0 else "", # Col L (12) (PIQUIN)
+                qtys[7] if qtys[7] > 0 else "", # Col M (13) (FUEGUITO)
+                f"=SUM(F{new_row_idx}*PRODUCTOS!$G$3,G{new_row_idx}*PRODUCTOS!$G$4,H{new_row_idx}*PRODUCTOS!$G$5,I{new_row_idx}*PRODUCTOS!$G$6,J{new_row_idx}*PRODUCTOS!$G$7,K{new_row_idx}*PRODUCTOS!$G$8,L{new_row_idx}*PRODUCTOS!$G$10,M{new_row_idx}*PRODUCTOS!$G$9)", # Col N (14) (COMPRA)
+                total_sale, # Col O (15) (VENTA)
+                f"=O{new_row_idx}-N{new_row_idx}", # Col P (16) (GANANCIA BRUTA)
+                abonado, # Col Q (17) (ABONADO)
+                pendiente, # Col R (18) (PENDIENTE)
+                folio, # Col S (19) (FOLIO)
+                estado_pago # Col T (20) (ESTADO_PAGO)
             ]
             ws.append_row(new_row, value_input_option="USER_ENTERED")
             return True
@@ -794,11 +795,11 @@ def update_abono_in_salidas(folio, new_abonado, new_pendiente, nuevo_estado):
             for i, row in enumerate(all_values):
                 if i < 2:
                     continue
-                if len(row) > 1 and row[1].strip() == folio.strip():
+                if len(row) > 18 and row[18].strip() == folio.strip():
                     row_idx = i + 1
-                    ws.update_cell(row_idx, 16, new_abonado)  # Col P (16)
-                    ws.update_cell(row_idx, 17, new_pendiente) # Col Q (17)
-                    ws.update_cell(row_idx, 18, nuevo_estado)  # Col R (18)
+                    ws.update_cell(row_idx, 17, new_abonado)  # Col Q (17)
+                    ws.update_cell(row_idx, 18, new_pendiente) # Col R (18)
+                    ws.update_cell(row_idx, 20, nuevo_estado)  # Col T (20)
                     break
             return True
         except Exception as e:
@@ -830,16 +831,16 @@ def revoke_recibo_in_salidas(folio):
             for i, row in enumerate(all_values):
                 if i < 2:
                     continue
-                if len(row) > 1 and row[1].strip() == folio.strip():
+                if len(row) > 18 and row[18].strip() == folio.strip():
                     row_idx = i + 1
-                    original_name = row[2]
-                    ws.update_cell(row_idx, 3, f"[REVOCADO] {original_name}") # Col C (3)
-                    for c in range(5, 13):
-                        ws.update_cell(row_idx, c, "") # Columns E to L (5 to 12)
-                    ws.update_cell(row_idx, 14, 0.0) # Column N (14, VENTA)
-                    ws.update_cell(row_idx, 16, 0.0) # Column P (16, ABONADO)
-                    ws.update_cell(row_idx, 17, 0.0) # Column Q (17, PENDIENTE)
-                    ws.update_cell(row_idx, 18, "REVOCADO") # Column R (18, ESTADO_PAGO)
+                    original_name = row[3]
+                    ws.update_cell(row_idx, 4, f"[REVOCADO] {original_name}") # Col D (4)
+                    for c in range(6, 14):
+                        ws.update_cell(row_idx, c, "") # Columns F to M (6 to 13)
+                    ws.update_cell(row_idx, 15, 0.0) # Column O (15, VENTA)
+                    ws.update_cell(row_idx, 17, 0.0) # Column Q (17, ABONADO)
+                    ws.update_cell(row_idx, 18, 0.0) # Column R (18, PENDIENTE)
+                    ws.update_cell(row_idx, 20, "REVOCADO") # Column T (20, ESTADO_PAGO)
                     break
             return True
         except Exception as e:
@@ -1368,12 +1369,6 @@ with st.sidebar:
     
     if use_gsheets:
         st.success("🟢 Conectado a Google Sheets")
-        try:
-            ws_salidas = sh.worksheet("SALIDAS")
-            cols_salidas = ws_salidas.get_all_values()[1] # row 1 (headers)
-            st.write("Columnas SALIDAS:", cols_salidas)
-        except Exception as debug_err:
-            st.write("Error cols debug:", debug_err)
         if st.button("🔄 Sincronizar con Drive (Recargar)", use_container_width=True):
             st.cache_data.clear()
             st.rerun()
