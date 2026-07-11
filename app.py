@@ -239,7 +239,32 @@ st.markdown("""
         border: 1px solid rgba(198, 40, 40, 0.15) !important;
     }
     
-    /* Tabs styled matching brand identity */
+    /* Tabs styled matching brand identity and made sticky */
+    div[data-baseweb="tab-list"],
+    div[role="tablist"] {
+        position: -webkit-sticky !important;
+        position: sticky !important;
+        top: 56px !important;
+        z-index: 999 !important;
+        background-color: #faf8f0 !important;
+        padding: 10px 0 !important;
+        border-bottom: 2px solid #ffd200 !important;
+        display: flex !important;
+        width: 100% !important;
+    }
+    
+    /* Secondary (nested) tab list container */
+    div[data-baseweb="tab-panel"] div[data-baseweb="tab-list"],
+    div[data-baseweb="tab-panel"] div[role="tablist"],
+    div[role="tabpanel"] div[data-baseweb="tab-list"],
+    div[role="tabpanel"] div[role="tablist"] {
+        top: 114px !important; /* Stacked below main tabs */
+        z-index: 998 !important;
+        border-bottom: 1.5px solid #2e1b12 !important;
+        padding: 6px 0 !important;
+        background-color: #faf8f0 !important;
+    }
+    
     button[data-baseweb="tab-list"] {
         background-color: #e5e0d8 !important;
         border-radius: 12px !important;
