@@ -639,6 +639,97 @@ use_gsheets, sh, worksheet, conn_error = get_sheets_connection(SHEET_URL)
 if conn_error:
     st.sidebar.error(f"Error conectando a Google Sheets: {conn_error}")
 
+# Automatic One-Time Reset Trigger
+need_reset_file = os.path.join(os.path.dirname(__file__), ".need_reset")
+if os.path.exists(need_reset_file):
+    try:
+        # Clear local files if any exist
+        for f_name in [REC_FILE, "entradas.csv", GAS_FILE]:
+            if os.path.exists(f_name):
+                os.remove(f_name)
+        
+        # Reset Google Sheets if connected
+        if use_gsheets and sh is not None:
+            # Wipe SALIDAS
+            try:
+                ws_sal = sh.worksheet("SALIDAS")
+                ws_sal.clear()
+                sal_headers = [
+                    ["", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+                    ["", "NO. NOTA", "CLIENTE", "FECHA", "FUEGO", "RANCHERO", "SALSAS NEGRAS", "JALAPEÑO", "QUESO", "NATURAL", "PIQUIN", "FUEGUITO", "COMPRA", "VENTA", "GANANCIA BRUTA", "ABONADO", "PENDIENTE", "ESTADO_PAGO", "TIPO_PAGO"]
+                ]
+                ws_sal.update("A1", sal_headers)
+            except Exception:
+                pass
+                
+            # Wipe ENTRADAS
+            try:
+                ws_ent = sh.worksheet("ENTRADAS")
+                ws_ent.clear()
+                ws_ent.update("A1", [["CÓDIGO", "PRODUCTO", "DESCRIPCIÓN", "MARCA", "CANTIDAD", "FECHA", "OBSERVACIÓN"]])
+            except Exception:
+                pass
+                
+            # Wipe GASTOS
+            try:
+                ws_gas = sh.worksheet("GASTOS")
+                ws_gas.clear()
+                ws_gas.update("A1", [["NO", "FECHA", "CASETA", "GASOLINA", "COCHE", "ESTACIONAMIENTO", "PUBLICIDAD", "OTROS", "DESCRIPCION", "TOTAL"]])
+            except Exception:
+                pass
+                
+            # Update remote PRODUCTOS
+            try:
+                df_p = load_productos()
+                df_p['STOCK'] = 0
+                stock_updates = {
+                    'PO01': 3246, 'PO02': 161, 'PO03': 2907, 'PO04': 175,
+                    'PO05': 258, 'PO06': 273, 'PO07': 1017, 'PO08': 145
+                }
+                for code, qty in stock_updates.items():
+                    df_p.loc[df_p['CÓDIGO'] == code, 'STOCK'] = qty
+                
+                # NATURAL PO09
+                if 'PO09' not in df_p['CÓDIGO'].values:
+                    df_p = pd.concat([df_p, pd.DataFrame([{
+                        'CÓDIGO': 'PO09', 'PRODUCTO': 'NATURAL', 'DESCRIPCIÓN': 'BOLSA 50 GR',
+                        'MARCA': 'MAICITOS', 'PRECIO COMPRA': 6.6, 'STOCK': 0
+                    }])], ignore_index=True)
+                else:
+                    df_p.loc[df_p['CÓDIGO'] == 'PO09', 'PRODUCTO'] = 'NATURAL'
+                    df_p.loc[df_p['CÓDIGO'] == 'PO09', 'STOCK'] = 0
+                    
+                # PIQUIN PO10
+                if 'PO10' not in df_p['CÓDIGO'].values:
+                    df_p = pd.concat([df_p, pd.DataFrame([{
+                        'CÓDIGO': 'PO10', 'PRODUCTO': 'PIQUIN', 'DESCRIPCIÓN': 'BOLSA 50 GR',
+                        'MARCA': 'MAICITOS', 'PRECIO COMPRA': 6.6, 'STOCK': 0
+                    }])], ignore_index=True)
+                else:
+                    df_p.loc[df_p['CÓDIGO'] == 'PO10', 'PRODUCTO'] = 'PIQUIN'
+                    df_p.loc[df_p['CÓDIGO'] == 'PO10', 'STOCK'] = 0
+
+                # CHURROS LIMON PO11
+                if 'PO11' not in df_p['CÓDIGO'].values:
+                    df_p = pd.concat([df_p, pd.DataFrame([{
+                        'CÓDIGO': 'PO11', 'PRODUCTO': 'CHURROS DE MAÍZ LIMÓN', 'DESCRIPCIÓN': 'BOLSA 40 GR',
+                        'MARCA': 'MAICITOS', 'PRECIO COMPRA': 8.0, 'STOCK': 23
+                    }])], ignore_index=True)
+                else:
+                    df_p.loc[df_p['CÓDIGO'] == 'PO11', 'PRODUCTO'] = 'CHURROS DE MAÍZ LIMÓN'
+                    df_p.loc[df_p['CÓDIGO'] == 'PO11', 'STOCK'] = 23
+                    
+                save_productos(df_p)
+            except Exception:
+                pass
+                
+        # Remove the flag file to avoid repeated runs
+        os.remove(need_reset_file)
+        st.cache_data.clear()
+        st.rerun()
+    except Exception as e:
+        st.sidebar.error(f"Error reset: {e}")
+
 # Helper to safely look up or create worksheets (case-insensitive)
 def get_or_create_worksheet(sheet_name, columns):
     worksheets = sh.worksheets()
