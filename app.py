@@ -671,51 +671,55 @@ def load_recibos_from_salidas():
             if len(all_values) < 3:
                 return pd.DataFrame(columns=recibos_cols)
                 
+            # Auto-repair headers in GSheets if they are NATURAL/PIQUIN
+            try:
+                headers = all_values[1]
+                if len(headers) > 10:
+                    if headers[9].strip().upper() == "NATURAL":
+                        ws.update_cell(2, 10, "SAL Y LIMON")
+                    if headers[10].strip().upper() == "PIQUIN":
+                        ws.update_cell(2, 11, "CHURROS DE MAÍZ FLAMIN HOT")
+            except Exception:
+                pass
+
             rows = all_values[2:]
             records = []
             
-            # Match the order of flavor columns in the sheet (Cols E to L)
-            product_names = ["FUEGO", "RANCHERO", "SALSAS NEGRAS", "JALAPEÑO", "QUESO", "NATURAL", "PIQUIN", "FUEGUITO"]
+            product_names = ["FUEGO", "RANCHERO", "SALSAS NEGRAS", "JALAPEÑO", "QUESO", "SAL Y LIMON", "CHURROS DE MAÍZ FLAMIN HOT", "FUEGUITO"]
             
             for row in rows:
-                row = row + [""] * (20 - len(row))
+                row = row + [""] * (22 - len(row))
                 
-                col_b_val = row[1].strip()
-                col_c_val = row[2].strip()
-                col_d_val = row[3].strip()
-                col_e_val = row[4].strip()
-                col_s_val = row[18].strip()
-                col_t_val = row[19].strip()
-                
-                # Check if the row is an old layout row (15 columns format)
-                # In old format: row[1] (Col B) contains the Folio, and row[3] (Col D) contains the Date.
-                is_old_row = False
-                is_date_in_d = False
-                if col_d_val:
-                    if "/" in col_d_val or "-" in col_d_val:
-                        is_date_in_d = True
+                # Dynamic column resolution based on where the date is located (searching cols 3, 4, 5)
+                date_col = -1
+                for c in (3, 4, 5):
+                    val = row[c].strip()
+                    if val.count('/') >= 2 or val.count('-') >= 2:
+                        date_col = c
+                        break
                     else:
                         try:
-                            if float(col_d_val) > 40000:
-                                is_date_in_d = True
+                            if float(val) > 40000:
+                                date_col = c
+                                break
                         except ValueError:
                             pass
                             
-                if col_b_val and is_date_in_d:
-                    is_old_row = True
+                if date_col == -1:
+                    date_col = 3
                     
-                if is_old_row:
-                    cliente = col_c_val.upper()
-                    if not cliente or cliente == "CLIENTE":
-                        continue
-                        
-                    folio = col_b_val
-                    fecha = col_d_val
+                fecha = row[date_col].strip()
+                cliente = row[date_col - 1].strip().upper()
+                folio = row[date_col - 2].strip()
+                
+                if not cliente or cliente == "CLIENTE" or folio == "NO. NOTA":
+                    continue
                     
-                    # Parse flavor quantities from Columns E to L (index 4 to 11)
-                    products_list = []
-                    for p_idx, p_name in enumerate(product_names):
-                        col_val = row[4 + p_idx].strip()
+                products_list = []
+                for p_idx, p_name in enumerate(product_names):
+                    col_idx = date_col + 1 + p_idx
+                    if col_idx < len(row):
+                        col_val = row[col_idx].strip()
                         if col_val:
                             try:
                                 qty = int(float(col_val))
@@ -723,95 +727,46 @@ def load_recibos_from_salidas():
                                     products_list.append(f"{qty}x {p_name}")
                             except ValueError:
                                 pass
-                    products_summary = "; ".join(products_list)
-                    is_revoked = cliente.startswith("[REVOCADO]")
+                products_summary = "; ".join(products_list) if products_list else "NINGUNO"
+                is_revoked = cliente.startswith("[REVOCADO]")
+                
+                cost_idx = date_col + 9
+                sale_idx = date_col + 10
+                profit_idx = date_col + 11
+                
+                try:
+                    costo_total = float(row[cost_idx].replace("$", "").replace(",", "").strip()) if row[cost_idx] else 0.0
+                except ValueError:
+                    costo_total = 0.0
+                try:
+                    total = float(row[sale_idx].replace("$", "").replace(",", "").strip()) if row[sale_idx] else 0.0
+                except ValueError:
+                    total = 0.0
+                try:
+                    ganancia = float(row[profit_idx].replace("$", "").replace(",", "").strip()) if row[profit_idx] else 0.0
+                except ValueError:
+                    ganancia = 0.0
                     
-                    # Financials (Columns M, N, O / indices 12, 13, 14)
-                    try:
-                        total = float(row[13].replace("$", "").replace(",", "").strip()) if row[13] else 0.0
-                    except ValueError:
-                        total = 0.0
-                    try:
-                        costo_total = float(row[12].replace("$", "").replace(",", "").strip()) if row[12] else 0.0
-                    except ValueError:
-                        costo_total = 0.0
-                    try:
-                        ganancia = float(row[14].replace("$", "").replace(",", "").strip()) if row[14] else 0.0
-                    except ValueError:
-                        ganancia = 0.0
-                        
-                    # Fallback payment values for old rows
+                abonado_idx = date_col + 12
+                pendiente_idx = date_col + 13
+                estado_idx = date_col + 14
+                tipo_idx = date_col + 15
+                
+                try:
+                    abonado = float(row[abonado_idx].replace("$", "").replace(",", "").strip()) if row[abonado_idx] else total
+                except ValueError:
                     abonado = total
+                try:
+                    pendiente = float(row[pendiente_idx].replace("$", "").replace(",", "").strip()) if row[pendiente_idx] else 0.0
+                except ValueError:
                     pendiente = 0.0
-                    estado_pago = "REVOCADO" if is_revoked else "Pagado"
-                    tipo_pago = "Contado" if (total > 0) else "Consigna"
                     
-                else:
-                    cliente = col_d_val.upper()
-                    if not cliente or cliente == "CLIENTE":
-                        continue
-                        
-                    fecha = col_e_val
+                estado_pago = row[estado_idx].strip() if row[estado_idx].strip() else ("REVOCADO" if is_revoked else "Pagado")
+                tipo_pago = row[tipo_idx].strip() if row[tipo_idx].strip() else ("Contado" if (total > 0) else "Consigna")
+                
+                if is_revoked:
+                    estado_pago = "REVOCADO"
                     
-                    # Parse flavor quantities from Columns F to M (index 5 to 12)
-                    products_list = []
-                    for p_idx, p_name in enumerate(product_names):
-                        col_val = row[5 + p_idx].strip()
-                        if col_val:
-                            try:
-                                qty = int(float(col_val))
-                                if qty > 0:
-                                    products_list.append(f"{qty}x {p_name}")
-                            except ValueError:
-                                pass
-                    products_summary = "; ".join(products_list)
-                    is_revoked = cliente.startswith("[REVOCADO]")
-                    
-                    # Financials (Columns N, O, P / indices 13, 14, 15)
-                    try:
-                        total = float(row[14].replace("$", "").replace(",", "").strip()) if row[14] else 0.0
-                    except ValueError:
-                        total = 0.0
-                    try:
-                        costo_total = float(row[13].replace("$", "").replace(",", "").strip()) if row[13] else 0.0
-                    except ValueError:
-                        costo_total = 0.0
-                    try:
-                        ganancia = float(row[15].replace("$", "").replace(",", "").strip()) if row[15] else 0.0
-                    except ValueError:
-                        ganancia = 0.0
-                        
-                    # Payment info
-                    try:
-                        abonado = float(row[16].replace("$", "").replace(",", "").strip()) if row[16] else 0.0
-                    except ValueError:
-                        abonado = 0.0
-                    try:
-                        pendiente = float(row[17].replace("$", "").replace(",", "").strip()) if row[17] else 0.0
-                    except ValueError:
-                        pendiente = 0.0
-                        
-                    # Detect if swapped
-                    is_swapped = False
-                    if col_c_val in ["Contado", "Consigna", "Por Pagar", "Pagado", "REVOCADO"] or col_s_val.startswith("F-") or col_s_val.isdigit():
-                        is_swapped = True
-                        
-                    if is_swapped:
-                        folio = col_s_val if col_s_val else f"F-{len(records)+1:03d}"
-                        if col_t_val in ["Pagado", "Por Pagar", "REVOCADO"]:
-                            estado_pago = col_t_val
-                            tipo_pago = col_c_val if col_c_val in ["Contado", "Consigna"] else "Consigna"
-                        elif col_c_val in ["Pagado", "Por Pagar", "REVOCADO"]:
-                            estado_pago = col_c_val
-                            tipo_pago = col_t_val if col_t_val in ["Contado", "Consigna"] else "Consigna"
-                        else:
-                            tipo_pago = col_c_val
-                            estado_pago = col_t_val if col_t_val else ("Pagado" if (pendiente == 0) else "Por Pagar")
-                    else:
-                        folio = col_c_val if col_c_val else f"F-{len(records)+1:03d}"
-                        estado_pago = col_s_val if col_s_val else ("Pagado" if (pendiente == 0) else "Por Pagar")
-                        tipo_pago = col_t_val if col_t_val else ("Contado" if (pendiente == 0 or "FUEGUITO" in products_summary) else "Consigna")
-                        
                 records.append({
                     "FOLIO": folio,
                     "FECHA": fecha,
@@ -874,7 +829,7 @@ def save_recibo_to_salidas(folio, fecha, cliente, cart, total_sale, total_cost, 
             current_rows = len(ws.get_all_values())
             new_row_idx = current_rows + 1
             
-            product_names = ["FUEGO", "RANCHERO", "SALSAS NEGRAS", "JALAPEÑO", "QUESO", "NATURAL", "PIQUIN", "FUEGUITO"]
+            product_names = ["FUEGO", "RANCHERO", "SALSAS NEGRAS", "JALAPEÑO", "QUESO", "SAL Y LIMON", "CHURROS DE MAÍZ FLAMIN HOT", "FUEGUITO"]
             qtys = [0] * len(product_names)
             for item in cart:
                 item_name = item['PRODUCTO'].strip().upper()
@@ -882,28 +837,27 @@ def save_recibo_to_salidas(folio, fecha, cliente, cart, total_sale, total_cost, 
                     idx = product_names.index(item_name)
                     qtys[idx] += item['CANTIDAD']
                     
-            # Map elements to the correct sheet columns (preserving formulas in columns N and P)
+            # Map elements to the correct sheet columns (Col B = Folio, Col C = Cliente, Col D = Fecha, Col E-L = Flavors)
             new_row = [
                 "", # Col A (1)
-                "", # Col B (2)
-                folio, # Col C (3) (FOLIO)
-                cliente, # Col D (4) (CLIENTE)
-                fecha, # Col E (5) (FECHA)
-                qtys[0] if qtys[0] > 0 else "", # Col F (6) (FUEGO)
-                qtys[1] if qtys[1] > 0 else "", # Col G (7) (RANCHERO)
-                qtys[2] if qtys[2] > 0 else "", # Col H (8) (SALSAS NEGRAS)
-                qtys[3] if qtys[3] > 0 else "", # Col I (9) (JALAPEÑO)
-                qtys[4] if qtys[4] > 0 else "", # Col J (10) (QUESO)
-                qtys[5] if qtys[5] > 0 else "", # Col K (11) (NATURAL)
-                qtys[6] if qtys[6] > 0 else "", # Col L (12) (PIQUIN)
-                qtys[7] if qtys[7] > 0 else "", # Col M (13) (FUEGUITO)
-                f"=SUM(F{new_row_idx}*PRODUCTOS!$G$3,G{new_row_idx}*PRODUCTOS!$G$4,H{new_row_idx}*PRODUCTOS!$G$5,I{new_row_idx}*PRODUCTOS!$G$6,J{new_row_idx}*PRODUCTOS!$G$7,K{new_row_idx}*PRODUCTOS!$G$8,L{new_row_idx}*PRODUCTOS!$G$10,M{new_row_idx}*PRODUCTOS!$G$9)", # Col N (14) (COMPRA)
-                total_sale, # Col O (15) (VENTA)
-                f"=O{new_row_idx}-N{new_row_idx}", # Col P (16) (GANANCIA BRUTA)
-                abonado, # Col Q (17) (ABONADO)
-                pendiente, # Col R (18) (PENDIENTE)
-                estado_pago, # Col S (19) (ESTADO_PAGO)
-                payment_term # Col T (20) (TIPO_PAGO)
+                folio, # Col B (2) (FOLIO)
+                cliente, # Col C (3) (CLIENTE)
+                fecha, # Col D (4) (FECHA)
+                qtys[0] if qtys[0] > 0 else "", # Col E (5) (FUEGO)
+                qtys[1] if qtys[1] > 0 else "", # Col F (6) (RANCHERO)
+                qtys[2] if qtys[2] > 0 else "", # Col G (7) (SALSAS NEGRAS)
+                qtys[3] if qtys[3] > 0 else "", # Col H (8) (JALAPEÑO)
+                qtys[4] if qtys[4] > 0 else "", # Col I (9) (QUESO)
+                qtys[5] if qtys[5] > 0 else "", # Col J (10) (SAL Y LIMON)
+                qtys[6] if qtys[6] > 0 else "", # Col K (11) (CHURROS DE MAÍZ FLAMIN HOT)
+                qtys[7] if qtys[7] > 0 else "", # Col L (12) (FUEGUITO)
+                f"=SUM(E{new_row_idx}*PRODUCTOS!$G$3,F{new_row_idx}*PRODUCTOS!$G$4,G{new_row_idx}*PRODUCTOS!$G$5,H{new_row_idx}*PRODUCTOS!$G$6,I{new_row_idx}*PRODUCTOS!$G$7,J{new_row_idx}*PRODUCTOS!$G$8,K{new_row_idx}*PRODUCTOS!$G$10,L{new_row_idx}*PRODUCTOS!$G$9)", # Col M (13) (COMPRA)
+                total_sale, # Col N (14) (VENTA)
+                f"=N{new_row_idx}-M{new_row_idx}", # Col O (15) (GANANCIA BRUTA)
+                abonado, # Col P (16) (ABONADO)
+                pendiente, # Col Q (17) (PENDIENTE)
+                estado_pago, # Col R (18) (ESTADO_PAGO)
+                payment_term # Col S (19) (TIPO_PAGO)
             ]
             ws.append_row(new_row, value_input_option="USER_ENTERED")
             return True
@@ -932,11 +886,15 @@ def update_abono_in_salidas(folio, new_abonado, new_pendiente, nuevo_estado):
                 match_row = False
                 is_old = False
                 is_swapped = False
+                is_double_shifted = False
                 
                 # Check different folio positions
                 if len(row) > 18 and row[18].strip() == folio.strip():
                     match_row = True
                     is_swapped = True
+                elif len(row) > 3 and row[3].strip() == folio.strip():
+                    match_row = True
+                    is_double_shifted = True
                 elif len(row) > 2 and row[2].strip() == folio.strip():
                     match_row = True
                 elif len(row) > 1 and row[1].strip() == folio.strip():
@@ -952,6 +910,10 @@ def update_abono_in_salidas(folio, new_abonado, new_pendiente, nuevo_estado):
                     elif is_swapped:
                         ws.update_cell(row_idx, 17, new_abonado)  # Col Q (17)
                         ws.update_cell(row_idx, 18, new_pendiente) # Col R (18)
+                        ws.update_cell(row_idx, 20, nuevo_estado)  # Col T (20)
+                    elif is_double_shifted:
+                        ws.update_cell(row_idx, 18, new_abonado)  # Col R (18)
+                        ws.update_cell(row_idx, 19, new_pendiente) # Col S (19)
                         ws.update_cell(row_idx, 20, nuevo_estado)  # Col T (20)
                     else:
                         ws.update_cell(row_idx, 17, new_abonado)  # Col Q (17)
@@ -1003,6 +965,17 @@ def revoke_recibo_in_salidas(folio):
                     ws.update_cell(row_idx, 18, 0.0) # Column R (18, PENDIENTE)
                     ws.update_cell(row_idx, 20, "REVOCADO") # Column T (20, ESTADO_PAGO, since it is swapped)
                     break
+                elif len(row) > 3 and row[3].strip() == folio.strip():
+                    row_idx = i + 1
+                    original_name = row[4]
+                    ws.update_cell(row_idx, 5, f"[REVOCADO] {original_name}") # Col E (5)
+                    for c in range(7, 15):
+                        ws.update_cell(row_idx, c, "") # Columns G to N (7 to 14)
+                    ws.update_cell(row_idx, 16, 0.0) # Column P (16, VENTA)
+                    ws.update_cell(row_idx, 18, 0.0) # Column R (18, ABONADO)
+                    ws.update_cell(row_idx, 19, 0.0) # Column S (19, PENDIENTE)
+                    ws.update_cell(row_idx, 20, "REVOCADO") # Column T (20, ESTADO_PAGO)
+                    break
                 elif len(row) > 2 and row[2].strip() == folio.strip():
                     row_idx = i + 1
                     original_name = row[3]
@@ -1021,6 +994,10 @@ def revoke_recibo_in_salidas(folio):
                     for c in range(5, 13):
                         ws.update_cell(row_idx, c, "") # Columns E to L (5 to 12)
                     ws.update_cell(row_idx, 14, 0.0) # Column N (14, VENTA)
+                    if len(row) > 17:
+                        ws.update_cell(row_idx, 16, 0.0) # Column P (16, ABONADO)
+                        ws.update_cell(row_idx, 17, 0.0) # Column Q (17, PENDIENTE)
+                        ws.update_cell(row_idx, 18, "REVOCADO") # Column R (18, ESTADO_PAGO)
                     break
             return True
         except Exception as e:
@@ -1554,6 +1531,53 @@ with st.sidebar:
             st.rerun()
     else:
         st.warning("⚠️ Ejecutando en Modo Local")
+
+    # Actualización de Inventario Físico 2026
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("📦 Ajuste de Inventario")
+    if st.sidebar.button("Aplicar Inventario Físico Actualizado", use_container_width=True):
+        try:
+            df_p = load_productos()
+            
+            stock_updates = {
+                'PO01': 3246, # FUEGO
+                'PO02': 161,  # RANCHERO
+                'PO03': 2907, # SALSAS NEGRAS
+                'PO04': 175,  # JALAPEÑO
+                'PO05': 258,  # QUESO
+                'PO06': 273,  # SAL Y LIMON
+                'PO07': 1017, # FUEGUITO
+            }
+            
+            for code, qty in stock_updates.items():
+                df_p.loc[df_p['CÓDIGO'] == code, 'STOCK'] = qty
+                
+            df_p.loc[df_p['CÓDIGO'] == 'PO08', 'PRODUCTO'] = 'CHURROS DE MAÍZ FLAMIN HOT'
+            df_p.loc[df_p['CÓDIGO'] == 'PO08', 'DESCRIPCIÓN'] = 'BOLSA 40 GR'
+            df_p.loc[df_p['CÓDIGO'] == 'PO08', 'STOCK'] = 145
+            
+            if 'PO09' not in df_p['CÓDIGO'].values:
+                new_row = pd.DataFrame([{
+                    'CÓDIGO': 'PO09',
+                    'PRODUCTO': 'CHURROS DE MAÍZ LIMÓN',
+                    'DESCRIPCIÓN': 'BOLSA 40 GR',
+                    'MARCA': 'MAICITOS',
+                    'PRECIO COMPRA': 8.0,
+                    'STOCK': 23
+                }])
+                df_p = pd.concat([df_p, new_row], ignore_index=True)
+            else:
+                df_p.loc[df_p['CÓDIGO'] == 'PO09', 'STOCK'] = 23
+                df_p.loc[df_p['CÓDIGO'] == 'PO09', 'PRODUCTO'] = 'CHURROS DE MAÍZ LIMÓN'
+                df_p.loc[df_p['CÓDIGO'] == 'PO09', 'DESCRIPCIÓN'] = 'BOLSA 40 GR'
+                df_p.loc[df_p['CÓDIGO'] == 'PO09', 'PRECIO COMPRA'] = 8.0
+                
+            save_productos(df_p)
+            st.cache_data.clear()
+            st.sidebar.success("¡Inventario físico aplicado con éxito!")
+            st.rerun()
+        except Exception as e:
+            st.sidebar.error(f"Error al actualizar: {e}")
 
     st.divider()
     st.markdown("### Resumen Rápido")
