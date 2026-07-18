@@ -670,22 +670,11 @@ def load_recibos_from_salidas():
             # Skip first 2 rows (row 0: sum totals, row 1: headers)
             if len(all_values) < 3:
                 return pd.DataFrame(columns=recibos_cols)
-                
-            # Auto-repair headers in GSheets if they are NATURAL/PIQUIN
-            try:
-                headers = all_values[1]
-                if len(headers) > 10:
-                    if headers[9].strip().upper() == "NATURAL":
-                        ws.update_cell(2, 10, "SAL Y LIMON")
-                    if headers[10].strip().upper() == "PIQUIN":
-                        ws.update_cell(2, 11, "CHURROS DE MAÍZ FLAMIN HOT")
-            except Exception:
-                pass
 
             rows = all_values[2:]
             records = []
             
-            product_names = ["FUEGO", "RANCHERO", "SALSAS NEGRAS", "JALAPEÑO", "QUESO", "SAL Y LIMON", "CHURROS DE MAÍZ FLAMIN HOT", "FUEGUITO"]
+            product_names = ["FUEGO", "RANCHERO", "SALSAS NEGRAS", "JALAPEÑO", "QUESO", "SAL Y LIMON", "CHURROS FLAMIN HOT", "FUEGUITO"]
             
             for row in rows:
                 row = row + [""] * (22 - len(row))
@@ -829,12 +818,30 @@ def save_recibo_to_salidas(folio, fecha, cliente, cart, total_sale, total_cost, 
             current_rows = len(ws.get_all_values())
             new_row_idx = current_rows + 1
             
-            product_names = ["FUEGO", "RANCHERO", "SALSAS NEGRAS", "JALAPEÑO", "QUESO", "SAL Y LIMON", "CHURROS DE MAÍZ FLAMIN HOT", "FUEGUITO"]
-            qtys = [0] * len(product_names)
+            product_cols = ["FUEGO", "RANCHERO", "SALSAS NEGRAS", "JALAPEÑO", "QUESO", "NATURAL", "PIQUIN", "FUEGUITO"]
+            qtys = [0] * len(product_cols)
             for item in cart:
                 item_name = item['PRODUCTO'].strip().upper()
-                if item_name in product_names:
-                    idx = product_names.index(item_name)
+                mapped_name = None
+                if item_name == "FUEGO":
+                    mapped_name = "FUEGO"
+                elif item_name == "RANCHERO":
+                    mapped_name = "RANCHERO"
+                elif item_name == "SALSAS NEGRAS":
+                    mapped_name = "SALSAS NEGRAS"
+                elif item_name == "JALAPEÑO":
+                    mapped_name = "JALAPEÑO"
+                elif item_name == "QUESO":
+                    mapped_name = "QUESO"
+                elif item_name in ["NATURAL", "SAL Y LIMON"]:
+                    mapped_name = "NATURAL"
+                elif item_name in ["PIQUIN", "CHURROS DE MAÍZ LIMÓN", "CHURROS DE MAÍZ FLAMIN HOT", "CHURRITOS FUEGO"]:
+                    mapped_name = "PIQUIN"
+                elif item_name == "FUEGUITO":
+                    mapped_name = "FUEGUITO"
+                    
+                if mapped_name in product_cols:
+                    idx = product_cols.index(mapped_name)
                     qtys[idx] += item['CANTIDAD']
                     
             # Map elements to the correct sheet columns (Col B = Folio, Col C = Cliente, Col D = Fecha, Col E-L = Flavors)
@@ -848,8 +855,8 @@ def save_recibo_to_salidas(folio, fecha, cliente, cart, total_sale, total_cost, 
                 qtys[2] if qtys[2] > 0 else "", # Col G (7) (SALSAS NEGRAS)
                 qtys[3] if qtys[3] > 0 else "", # Col H (8) (JALAPEÑO)
                 qtys[4] if qtys[4] > 0 else "", # Col I (9) (QUESO)
-                qtys[5] if qtys[5] > 0 else "", # Col J (10) (SAL Y LIMON)
-                qtys[6] if qtys[6] > 0 else "", # Col K (11) (CHURROS DE MAÍZ FLAMIN HOT)
+                qtys[5] if qtys[5] > 0 else "", # Col J (10) (NATURAL)
+                qtys[6] if qtys[6] > 0 else "", # Col K (11) (PIQUIN)
                 qtys[7] if qtys[7] > 0 else "", # Col L (12) (FUEGUITO)
                 f"=SUM(E{new_row_idx}*PRODUCTOS!$G$3,F{new_row_idx}*PRODUCTOS!$G$4,G{new_row_idx}*PRODUCTOS!$G$5,H{new_row_idx}*PRODUCTOS!$G$6,I{new_row_idx}*PRODUCTOS!$G$7,J{new_row_idx}*PRODUCTOS!$G$8,K{new_row_idx}*PRODUCTOS!$G$10,L{new_row_idx}*PRODUCTOS!$G$9)", # Col M (13) (COMPRA)
                 total_sale, # Col N (14) (VENTA)
@@ -1532,13 +1539,55 @@ with st.sidebar:
     else:
         st.warning("⚠️ Ejecutando en Modo Local")
 
-    # Actualización de Inventario Físico 2026
+    # Reset General e Inicialización de Inventario
     st.sidebar.markdown("---")
-    st.sidebar.subheader("📦 Ajuste de Inventario")
-    if st.sidebar.button("Aplicar Inventario Físico Actualizado", use_container_width=True):
+    st.sidebar.subheader("🚨 Inicialización de Negocio")
+    if st.sidebar.button("Wipe Datos y Reset General", use_container_width=True):
         try:
+            # 1. Reset Local Files
+            for file_name in [REC_FILE, "entradas.csv", GAS_FILE]:
+                if os.path.exists(file_name):
+                    os.remove(file_name)
+            
+            # 2. Reset Google Sheets if connected
+            if use_gsheets and sh is not None:
+                # Reset SALIDAS
+                try:
+                    ws_salidas = sh.worksheet("SALIDAS")
+                    ws_salidas.clear()
+                    salidas_headers = [
+                        ["", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""], # Row 1 (sum totals empty placeholder)
+                        ["", "NO. NOTA", "CLIENTE", "FECHA", "FUEGO", "RANCHERO", "SALSAS NEGRAS", "JALAPEÑO", "QUESO", "NATURAL", "PIQUIN", "FUEGUITO", "COMPRA", "VENTA", "GANANCIA BRUTA", "ABONADO", "PENDIENTE", "ESTADO_PAGO", "TIPO_PAGO"]
+                    ]
+                    ws_salidas.update("A1", salidas_headers)
+                except Exception as e:
+                    st.sidebar.error(f"Error reset SALIDAS: {e}")
+                    
+                # Reset ENTRADAS
+                try:
+                    ws_entradas = sh.worksheet("ENTRADAS")
+                    ws_entradas.clear()
+                    entradas_headers = [["CÓDIGO", "PRODUCTO", "DESCRIPCIÓN", "MARCA", "CANTIDAD", "FECHA", "OBSERVACIÓN"]]
+                    ws_entradas.update("A1", entradas_headers)
+                except Exception as e:
+                    st.sidebar.error(f"Error reset ENTRADAS: {e}")
+                    
+                # Reset GASTOS
+                try:
+                    ws_gastos = sh.worksheet("GASTOS")
+                    ws_gastos.clear()
+                    gastos_headers = [["NO", "FECHA", "CASETA", "GASOLINA", "COCHE", "ESTACIONAMIENTO", "PUBLICIDAD", "OTROS", "DESCRIPCION", "TOTAL"]]
+                    ws_gastos.update("A1", gastos_headers)
+                except Exception as e:
+                    st.sidebar.error(f"Error reset GASTOS: {e}")
+
+            # 3. Update products inventory
             df_p = load_productos()
             
+            # Reset all existing to 0 first
+            df_p['STOCK'] = 0
+            
+            # Apply exact initial stock counts
             stock_updates = {
                 'PO01': 3246, # FUEGO
                 'PO02': 161,  # RANCHERO
@@ -1547,37 +1596,64 @@ with st.sidebar:
                 'PO05': 258,  # QUESO
                 'PO06': 273,  # SAL Y LIMON
                 'PO07': 1017, # FUEGUITO
+                'PO08': 145,  # CHURRITOS FUEGO (Flamin Hot)
             }
             
             for code, qty in stock_updates.items():
                 df_p.loc[df_p['CÓDIGO'] == code, 'STOCK'] = qty
                 
-            df_p.loc[df_p['CÓDIGO'] == 'PO08', 'PRODUCTO'] = 'CHURROS DE MAÍZ FLAMIN HOT'
-            df_p.loc[df_p['CÓDIGO'] == 'PO08', 'DESCRIPCIÓN'] = 'BOLSA 40 GR'
-            df_p.loc[df_p['CÓDIGO'] == 'PO08', 'STOCK'] = 145
-            
+            # Make sure NATURAL and PIQUIN exist in products list
             if 'PO09' not in df_p['CÓDIGO'].values:
-                new_row = pd.DataFrame([{
+                row_nat = pd.DataFrame([{
                     'CÓDIGO': 'PO09',
+                    'PRODUCTO': 'NATURAL',
+                    'DESCRIPCIÓN': 'BOLSA 50 GR',
+                    'MARCA': 'MAICITOS',
+                    'PRECIO COMPRA': 6.6,
+                    'STOCK': 0
+                }])
+                df_p = pd.concat([df_p, row_nat], ignore_index=True)
+            else:
+                df_p.loc[df_p['CÓDIGO'] == 'PO09', 'PRODUCTO'] = 'NATURAL'
+                df_p.loc[df_p['CÓDIGO'] == 'PO09', 'STOCK'] = 0
+                
+            if 'PO10' not in df_p['CÓDIGO'].values:
+                row_piq = pd.DataFrame([{
+                    'CÓDIGO': 'PO10',
+                    'PRODUCTO': 'PIQUIN',
+                    'DESCRIPCIÓN': 'BOLSA 50 GR',
+                    'MARCA': 'MAICITOS',
+                    'PRECIO COMPRA': 6.6,
+                    'STOCK': 0
+                }])
+                df_p = pd.concat([df_p, row_piq], ignore_index=True)
+            else:
+                df_p.loc[df_p['CÓDIGO'] == 'PO10', 'PRODUCTO'] = 'PIQUIN'
+                df_p.loc[df_p['CÓDIGO'] == 'PO10', 'STOCK'] = 0
+
+            # Add CHURROS DE MAÍZ LIMÓN PO11
+            if 'PO11' not in df_p['CÓDIGO'].values:
+                row_lim = pd.DataFrame([{
+                    'CÓDIGO': 'PO11',
                     'PRODUCTO': 'CHURROS DE MAÍZ LIMÓN',
                     'DESCRIPCIÓN': 'BOLSA 40 GR',
                     'MARCA': 'MAICITOS',
                     'PRECIO COMPRA': 8.0,
                     'STOCK': 23
                 }])
-                df_p = pd.concat([df_p, new_row], ignore_index=True)
+                df_p = pd.concat([df_p, row_lim], ignore_index=True)
             else:
-                df_p.loc[df_p['CÓDIGO'] == 'PO09', 'STOCK'] = 23
-                df_p.loc[df_p['CÓDIGO'] == 'PO09', 'PRODUCTO'] = 'CHURROS DE MAÍZ LIMÓN'
-                df_p.loc[df_p['CÓDIGO'] == 'PO09', 'DESCRIPCIÓN'] = 'BOLSA 40 GR'
-                df_p.loc[df_p['CÓDIGO'] == 'PO09', 'PRECIO COMPRA'] = 8.0
+                df_p.loc[df_p['CÓDIGO'] == 'PO11', 'PRODUCTO'] = 'CHURROS DE MAÍZ LIMÓN'
+                df_p.loc[df_p['CÓDIGO'] == 'PO11', 'DESCRIPCIÓN'] = 'BOLSA 40 GR'
+                df_p.loc[df_p['CÓDIGO'] == 'PO11', 'PRECIO COMPRA'] = 8.0
+                df_p.loc[df_p['CÓDIGO'] == 'PO11', 'STOCK'] = 23
                 
             save_productos(df_p)
             st.cache_data.clear()
-            st.sidebar.success("¡Inventario físico aplicado con éxito!")
+            st.sidebar.success("¡Datos borrados y nuevo inventario inicial aplicado con éxito!")
             st.rerun()
         except Exception as e:
-            st.sidebar.error(f"Error al actualizar: {e}")
+            st.sidebar.error(f"Error al reiniciar: {e}")
 
     st.divider()
     st.markdown("### Resumen Rápido")
