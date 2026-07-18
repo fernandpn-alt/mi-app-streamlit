@@ -861,6 +861,8 @@ def load_recibos_from_salidas():
                     "PENDIENTE": pendiente
                 })
                 
+            if not records:
+                return pd.DataFrame(columns=recibos_cols)
             return pd.DataFrame(records)
         except Exception as e:
             st.sidebar.warning(f"⚠️ Sincronización de Salidas falló. Usando copia local. Detalle: {e}")
@@ -1179,6 +1181,8 @@ def load_gastos_from_sheet():
                         except ValueError:
                             pass
                             
+            if not records:
+                return pd.DataFrame(columns=["ROW_IDX", "COL_IDX", "FECHA", "CATEGORIA", "DESCRIPCION", "MONTO"])
             return pd.DataFrame(records)
         except Exception as e:
             st.sidebar.warning(f"⚠️ Sincronización de Gastos falló. Usando copia local. Detalle: {e}")
@@ -1352,6 +1356,8 @@ def load_entradas_from_sheet():
                     "FECHA": fecha,
                     "OBSERVACIÓN": observacion
                 })
+            if not records:
+                return pd.DataFrame(columns=["ROW_IDX", "CÓDIGO", "PRODUCTO", "DESCRIPCIÓN", "MARCA", "CANTIDAD", "FECHA", "OBSERVACIÓN"])
             return pd.DataFrame(records)
         except Exception as e:
             st.sidebar.warning(f"⚠️ Sincronización de Entradas falló. Usando copia local. Detalle: {e}")
@@ -1587,6 +1593,8 @@ def get_clientes_from_recibos(df_rec):
             "DEUDA": deuda,
             "ESTADO": estado
         })
+    if not records:
+        return pd.DataFrame(columns=["CLIENTE", "TOTAL_COMPRADO", "METODO_COMUN", "FRECUENCIA", "DEUDA", "ESTADO"])
     return pd.DataFrame(records)
 
 df_clientes = get_clientes_from_recibos(df_recibos)
