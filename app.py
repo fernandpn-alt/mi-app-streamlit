@@ -457,6 +457,19 @@ class CustomWorksheet:
         except Exception as e:
             raise Exception(f"Error reading column values: {e}")
             
+    def row_values(self, row, value_render_option="FORMATTED_VALUE"):
+        cell_range = f"{self.title}!{row}:{row}"
+        safe_range = urllib.parse.quote(cell_range)
+        url = f"https://sheets.googleapis.com/v4/spreadsheets/{self.spreadsheet_id}/values/{safe_range}?valueRenderOption={value_render_option}"
+        req = urllib.request.Request(url, headers=self._headers())
+        try:
+            with urllib.request.urlopen(req) as response:
+                res = json.loads(response.read().decode('utf-8'))
+                values_list = res.get("values", [])
+                return values_list[0] if values_list else []
+        except Exception as e:
+            raise Exception(f"Error reading row values: {e}")
+            
     def _col_to_letter(self, col):
         letter = ""
         while col > 0:
@@ -506,6 +519,33 @@ class CustomSpreadsheet:
         if title_lower in self._worksheets_cache:
             return self._worksheets_cache[title_lower]
         raise Exception(f"Worksheet not found: {title}")
+        
+    def add_worksheet(self, title, rows=1000, cols=20):
+        url = f"https://sheets.googleapis.com/v4/spreadsheets/{self.id}:batchUpdate"
+        body = json.dumps({
+            "requests": [{
+                "addSheet": {
+                    "properties": {
+                        "title": title,
+                        "gridProperties": {
+                            "rowCount": rows,
+                            "columnCount": cols
+                        }
+                    }
+                }
+            }]
+        }).encode('utf-8')
+        req = urllib.request.Request(url, data=body, headers=self._headers(), method="POST")
+        try:
+            with urllib.request.urlopen(req) as response:
+                res = json.loads(response.read().decode('utf-8'))
+                added_sheet_props = res["replies"][0]["addSheet"]["properties"]
+                sheet_id = added_sheet_props["sheetId"]
+                ws = CustomWorksheet(self.id, title, sheet_id, self.access_token)
+                self._worksheets_cache[title.lower()] = ws
+                return ws
+        except Exception as e:
+            raise Exception(f"Error adding worksheet: {e}")
 
 # Cache Sheets connection and formulas repair to optimize API usage
 @st.cache_resource(ttl=1800)
@@ -961,7 +1001,7 @@ def revoke_recibo_in_salidas(folio):
                     ws.update_cell(row_idx, 15, 0.0) # Column O (15, VENTA)
                     ws.update_cell(row_idx, 17, 0.0) # Column Q (17, ABONADO)
                     ws.update_cell(row_idx, 18, 0.0) # Column R (18, PENDIENTE)
-                    ws.update_cell(row_idx, 19, "REVOCADO") # Column S (19, ESTADO_PAGO)
+                    ws.update_cell(row_idx, 20, "REVOCADO") # Column T (20, ESTADO_PAGO, since it is swapped)
                     break
                 elif len(row) > 2 and row[2].strip() == folio.strip():
                     row_idx = i + 1
@@ -1734,9 +1774,9 @@ with tab_fact:
             if qty >= 100:
                 price_per_piece = 12.00 if term == "Contado" else 13.50
             elif qty == 30:
-                price_per_piece = 30.00 if term == "Contado" else 14.50
+                price_per_piece = 13.00 if term == "Contado" else 14.50
             else:
-                price_per_piece = 30.00 if term == "Contado" else 14.50 # Default retail
+                price_per_piece = 13.00 if term == "Contado" else 14.50 # Default retail
                 
         total = price_per_piece * qty
         cost = cost_per_piece * qty
@@ -2657,7 +2697,7 @@ Asistente:"""
 
                 with st.chat_message("assistant", avatar="🤖"):
                     with st.spinner("Analizando información del negocio..."):
-                        model = genai.GenerativeModel("gemini-2.5-flash")
+                        model = genai.GenerativeModel("gemini-1.5-flash")
                         response = model.generate_content(context_prompt)
                         st.markdown(response.text)
                 st.session_state.ia_messages.append({"role": "assistant", "content": response.text})
